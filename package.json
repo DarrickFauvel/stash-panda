@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.9",
     "better-sqlite3": "^11.10.0",
     "drizzle-orm": "^0.44.2",
     "next": "15.3.3",
