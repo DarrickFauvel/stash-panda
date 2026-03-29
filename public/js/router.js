@@ -429,17 +429,10 @@ async function routeInventory(matches) {
 
             <div>
               <div class="text-sm font-medium mb-2">Locations</div>
-              <div class="tag-list mb-3" id="loc-list">
-                ${locations.map(l => `
-                  <span class="tag" data-loc-id="${l.id}">
-                    ${escapeHTML(l.name)}
-                    <button class="tag__remove" data-loc-id="${l.id}" aria-label="Remove ${escapeHTML(l.name)}">×</button>
-                  </span>
-                `).join('')}
-              </div>
-              <form id="add-loc-form" class="inline-add-form">
-                <input type="text" id="loc-input" placeholder="Add location…" maxlength="80">
-                <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+              <div id="loc-tree"></div>
+              <form id="add-room-form" class="inline-add-form mt-2">
+                <input type="text" id="room-input" placeholder="Add room…" maxlength="80">
+                <button type="submit" class="btn btn-secondary btn-sm">+ Room</button>
               </form>
             </div>
 
@@ -536,11 +529,127 @@ async function routeInventory(matches) {
 
     // ── Locations & Categories ─────────────────────────────────────────────
     if (canEdit) {
-      function renderTags(list, containerId, idAttr, deletePath) {
+      // Hierarchical location tree (depth 0=room, 1=shelf, 2=container)
+      const depthLabel = ['Room', 'Shelf', 'Container']
+      const childLabel = ['+ Shelf', '+ Container']
+
+      function buildTree(nodes, parentId = null) {
+        return nodes
+          .filter(n => (n.parent_id ?? null) === parentId)
+          .map(n => ({ ...n, children: buildTree(nodes, n.id) }))
+      }
+
+      function startInlineEdit(nameEl, onSave) {
+        const original = nameEl.textContent.trim()
+        const input = document.createElement('input')
+        input.className = 'inline-edit-input'
+        input.value = original
+        input.maxLength = 80
+        nameEl.replaceWith(input)
+        input.focus()
+        input.select()
+        async function commit() {
+          const val = input.value.trim()
+          if (!val || val === original) { renderLocTree(); return }
+          try { await onSave(val) } catch (err) { alert(err.message); renderLocTree() }
+        }
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { renderLocTree() }
+        })
+        input.addEventListener('blur', commit)
+      }
+
+      function renderLocTree() {
+        const tree = buildTree(locations)
+        const container = document.getElementById('loc-tree')
+        container.innerHTML = renderNodes(tree, 0)
+        container.querySelectorAll('.loc-delete').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.id
+            try {
+              await api('DELETE', `/inventories/${inventoryId}/locations/${id}`)
+              const idx = locations.findIndex(l => l.id === id)
+              if (idx !== -1) locations.splice(idx, 1)
+              locations.forEach(l => { if (l.parent_id === id) l.parent_id = null })
+              renderLocTree()
+            } catch (err) { alert(err.message) }
+          })
+        })
+        container.querySelectorAll('.loc-node__name').forEach(nameEl => {
+          nameEl.addEventListener('click', () => {
+            const id = nameEl.dataset.id
+            startInlineEdit(nameEl, async val => {
+              await api('PATCH', `/inventories/${inventoryId}/locations/${id}`, { name: val })
+              const loc = locations.find(l => l.id === id)
+              if (loc) loc.name = val
+              renderLocTree()
+            })
+          })
+        })
+        container.querySelectorAll('.loc-add-child-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const form = container.querySelector(`.loc-child-form[data-parent="${btn.dataset.parent}"]`)
+            if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input').focus() }
+          })
+        })
+        container.querySelectorAll('.loc-child-form').forEach(form => {
+          form.addEventListener('submit', async e => {
+            e.preventDefault()
+            const input = form.querySelector('input')
+            const name = input.value.trim()
+            if (!name) return
+            try {
+              const data = await api('POST', `/inventories/${inventoryId}/locations`, {
+                name,
+                parent_id: form.dataset.parent,
+              })
+              if (data) { locations.push(data.location); renderLocTree() }
+              input.value = ''
+            } catch (err) { alert(err.message) }
+          })
+        })
+      }
+
+      function renderNodes(nodes, depth) {
+        if (!nodes.length && depth > 0) return ''
+        return nodes.map(node => `
+          <div class="loc-node loc-depth-${depth}">
+            <div class="loc-node__row">
+              <span class="loc-depth-label">${depthLabel[depth] ?? 'Location'}</span>
+              <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
+              ${depth < 2 ? `<button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}">${childLabel[depth]}</button>` : ''}
+              <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" aria-label="Delete">×</button>
+            </div>
+            ${depth < 2 ? `
+            <form class="inline-add-form loc-child-form mt-1 mb-1" data-parent="${node.id}" hidden>
+              <input type="text" placeholder="Add ${depthLabel[depth + 1].toLowerCase()}…" maxlength="80">
+              <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+            </form>` : ''}
+            ${node.children.length ? `<div class="loc-children">${renderNodes(node.children, depth + 1)}</div>` : ''}
+          </div>
+        `).join('')
+      }
+
+      renderLocTree()
+
+      document.getElementById('add-room-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const input = document.getElementById('room-input')
+        const name = input.value.trim()
+        if (!name) return
+        try {
+          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name })
+          if (data) { locations.push(data.location); renderLocTree() }
+          input.value = ''
+        } catch (err) { alert(err.message) }
+      })
+
+      function renderTags(list, containerId, deletePath) {
         const el = document.getElementById(containerId)
         el.innerHTML = list.map(item => `
           <span class="tag">
-            ${escapeHTML(item.name)}
+            <span class="tag-name editable-name" data-id="${item.id}" title="Click to rename">${escapeHTML(item.name)}</span>
             <button class="tag__remove" data-id="${item.id}" aria-label="Remove ${escapeHTML(item.name)}">×</button>
           </span>
         `).join('')
@@ -549,26 +658,41 @@ async function routeInventory(matches) {
             try {
               await api('DELETE', `/inventories/${inventoryId}/${deletePath}/${btn.dataset.id}`)
               list.splice(list.findIndex(i => i.id === btn.dataset.id), 1)
-              renderTags(list, containerId, idAttr, deletePath)
+              renderTags(list, containerId, deletePath)
             } catch (err) { alert(err.message) }
+          })
+        })
+        el.querySelectorAll('.tag-name').forEach(nameEl => {
+          nameEl.addEventListener('click', () => {
+            const id = nameEl.dataset.id
+            const original = nameEl.textContent.trim()
+            const input = document.createElement('input')
+            input.className = 'inline-edit-input inline-edit-input--tag'
+            input.value = original
+            input.maxLength = 80
+            nameEl.replaceWith(input)
+            input.focus()
+            input.select()
+            async function commit() {
+              const val = input.value.trim()
+              if (!val || val === original) { renderTags(list, containerId, deletePath); return }
+              try {
+                await api('PATCH', `/inventories/${inventoryId}/${deletePath}/${id}`, { name: val })
+                const item = list.find(i => i.id === id)
+                if (item) item.name = val
+                renderTags(list, containerId, deletePath)
+              } catch (err) { alert(err.message); renderTags(list, containerId, deletePath) }
+            }
+            input.addEventListener('keydown', e => {
+              if (e.key === 'Enter') { e.preventDefault(); commit() }
+              if (e.key === 'Escape') { renderTags(list, containerId, deletePath) }
+            })
+            input.addEventListener('blur', commit)
           })
         })
       }
 
-      renderTags(locations, 'loc-list', 'loc-id', 'locations')
-      renderTags(categories, 'cat-list', 'cat-id', 'categories')
-
-      document.getElementById('add-loc-form').addEventListener('submit', async e => {
-        e.preventDefault()
-        const input = document.getElementById('loc-input')
-        const name = input.value.trim()
-        if (!name) return
-        try {
-          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name })
-          if (data) { locations.push(data.location); renderTags(locations, 'loc-list', 'loc-id', 'locations') }
-          input.value = ''
-        } catch (err) { alert(err.message) }
-      })
+      renderTags(categories, 'cat-list', 'categories')
 
       document.getElementById('add-cat-form').addEventListener('submit', async e => {
         e.preventDefault()
@@ -577,7 +701,7 @@ async function routeInventory(matches) {
         if (!name) return
         try {
           const data = await api('POST', `/inventories/${inventoryId}/categories`, { name })
-          if (data) { categories.push(data.category); renderTags(categories, 'cat-list', 'cat-id', 'categories') }
+          if (data) { categories.push(data.category); renderTags(categories, 'cat-list', 'categories') }
           input.value = ''
         } catch (err) { alert(err.message) }
       })
@@ -734,8 +858,15 @@ async function routeItemNew(matches) {
   const locations = locData?.locations ?? []
   const categories = catData?.categories ?? []
 
-  const locOptions = `<option value="">— None —</option>` +
-    locations.map(l => `<option value="${l.id}">${escapeHTML(l.name)}</option>`).join('')
+  function buildLocOptions(nodes, parentId = null, depth = 0) {
+    return nodes
+      .filter(n => (n.parent_id ?? null) === parentId)
+      .flatMap(n => [
+        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${escapeHTML(n.name)}</option>`,
+        ...buildLocOptions(nodes, n.id, depth + 1),
+      ])
+  }
+  const locOptions = `<option value="">— None —</option>` + buildLocOptions(locations).join('')
   const catOptions = `<option value="">— None —</option>` +
     categories.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('')
 

@@ -344,6 +344,27 @@ router.post('/:id/locations', requireAuth, async (req, res) => {
   }
 })
 
+// PATCH /api/inventories/:id/categories/:categoryId
+router.patch('/:id/categories/:categoryId', requireAuth, async (req, res) => {
+  const { id, categoryId } = req.params as Record<string, string>
+  const { name } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  try {
+    const access = await db.execute({
+      sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
+      args: [id, req.user!.id],
+    })
+    if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
+    await db.execute({
+      sql: 'UPDATE categories SET name = ? WHERE id = ? AND inventory_id = ?',
+      args: [name.trim(), categoryId, id],
+    })
+    res.json({ category: { id: categoryId, name: name.trim() } })
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // DELETE /api/inventories/:id/categories/:categoryId
 router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
   const { id, categoryId } = req.params as Record<string, string>
@@ -355,6 +376,27 @@ router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
     if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
     await db.execute({ sql: 'DELETE FROM categories WHERE id = ? AND inventory_id = ?', args: [categoryId, id] })
     res.status(204).end()
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// PATCH /api/inventories/:id/locations/:locationId
+router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
+  const { id, locationId } = req.params as Record<string, string>
+  const { name } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  try {
+    const access = await db.execute({
+      sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
+      args: [id, req.user!.id],
+    })
+    if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
+    await db.execute({
+      sql: 'UPDATE locations SET name = ? WHERE id = ? AND inventory_id = ?',
+      args: [name.trim(), locationId, id],
+    })
+    res.json({ location: { id: locationId, name: name.trim() } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
