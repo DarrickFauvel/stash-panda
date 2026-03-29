@@ -1,0 +1,662 @@
+/**
+ * Client-side router — History API + server-rendered HTML fragments
+ *
+ * Pattern:
+ *   1. Intercepts <a data-link> clicks
+ *   2. Matches path against route table
+ *   3. Calls route handler; handler renders HTML into #app
+ *   4. Manages auth state from localStorage
+ */
+
+export const auth = {
+  get token() { return localStorage.getItem('sp_token') },
+  get user()  {
+    const raw = localStorage.getItem('sp_user')
+    try { return raw ? JSON.parse(raw) : null } catch { return null }
+  },
+  save(token, user) {
+    localStorage.setItem('sp_token', token)
+    localStorage.setItem('sp_user', JSON.stringify(user))
+  },
+  clear() {
+    localStorage.removeItem('sp_token')
+    localStorage.removeItem('sp_user')
+  },
+  get isLoggedIn() { return Boolean(this.token) },
+}
+
+// ─── API helper ─────────────────────────────────────────────────────────────
+
+export async function api(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
+
+  const res = await fetch(`/api${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+
+  if (res.status === 401) {
+    auth.clear()
+    navigate('/login')
+    return null
+  }
+
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+  return data
+}
+
+// ─── Render helpers ──────────────────────────────────────────────────────────
+
+function setHTML(html) {
+  document.getElementById('app').innerHTML = html
+}
+
+function setNav(isLoggedIn) {
+  document.getElementById('bottom-nav').hidden = !isLoggedIn
+
+  const actions = document.getElementById('header-actions')
+  if (isLoggedIn) {
+    actions.innerHTML = `
+      <span class="text-sm text-muted">${auth.user?.name ?? ''}</span>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">Sign out</button>
+    `
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      auth.clear()
+      navigate('/login')
+    })
+  } else {
+    actions.innerHTML = ''
+  }
+
+  // Highlight active bottom nav item
+  const path = location.pathname
+  document.querySelectorAll('.bottom-nav__item').forEach(a => {
+    const route = a.dataset.nav
+    const active = path.startsWith(`/${route}`)
+    a.setAttribute('aria-current', active ? 'page' : 'false')
+  })
+}
+
+// ─── Route handlers ──────────────────────────────────────────────────────────
+
+const routes = [
+  { pattern: /^\/$/, handler: routeHome },
+  { pattern: /^\/login$/, handler: routeLogin },
+  { pattern: /^\/signup$/, handler: routeSignup },
+  { pattern: /^\/inventories$/, handler: routeInventories },
+  { pattern: /^\/inventories\/new$/, handler: routeInventoryNew },
+  { pattern: /^\/inventories\/([^/]+)$/, handler: routeInventory },
+  { pattern: /^\/inventories\/([^/]+)\/items$/, handler: routeItems },
+  { pattern: /^\/inventories\/([^/]+)\/items\/new$/, handler: routeItemNew },
+  { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)$/, handler: routeItem },
+  { pattern: /^\/profile$/, handler: routeProfile },
+  { pattern: /^\/invite\/([^/]+)$/, handler: routeInvite },
+]
+
+function routeHome() {
+  if (!auth.isLoggedIn) return navigate('/login')
+  navigate('/inventories')
+}
+
+function routeLogin() {
+  if (auth.isLoggedIn) return navigate('/inventories')
+  setHTML(`
+    <div class="auth-page">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo__mark">🐼</div>
+          <div class="auth-logo__name">Stash Panda</div>
+        </div>
+        <h1 class="auth-title">Welcome back</h1>
+        <div id="auth-error" role="alert"></div>
+        <form id="login-form">
+          <div class="field">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-full btn-lg">Sign in</button>
+          </div>
+        </form>
+        <div class="auth-footer">
+          No account? <a href="/signup" data-link>Create one</a>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('auth-error')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    btn.textContent = 'Signing in…'
+    try {
+      const data = await api('POST', '/auth/login', {
+        email: e.target.email.value,
+        password: e.target.password.value,
+      })
+      if (data) {
+        auth.save(data.token, data.user)
+        navigate('/inventories')
+      }
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
+      btn.disabled = false
+      btn.textContent = 'Sign in'
+    }
+  })
+}
+
+function routeSignup() {
+  if (auth.isLoggedIn) return navigate('/inventories')
+  setHTML(`
+    <div class="auth-page">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo__mark">🐼</div>
+          <div class="auth-logo__name">Stash Panda</div>
+        </div>
+        <h1 class="auth-title">Create account</h1>
+        <div id="auth-error" role="alert"></div>
+        <form id="signup-form">
+          <div class="field">
+            <label for="name">Your name</label>
+            <input type="text" id="name" name="name" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+            <span class="field-hint">At least 8 characters</span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-full btn-lg">Create account</button>
+          </div>
+        </form>
+        <div class="auth-footer">
+          Already have an account? <a href="/login" data-link>Sign in</a>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('signup-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('auth-error')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    btn.textContent = 'Creating account…'
+    try {
+      const data = await api('POST', '/auth/signup', {
+        name: e.target.name.value,
+        email: e.target.email.value,
+        password: e.target.password.value,
+      })
+      if (data) {
+        auth.save(data.token, data.user)
+        navigate('/inventories')
+      }
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
+      btn.disabled = false
+      btn.textContent = 'Create account'
+    }
+  })
+}
+
+async function routeInventories() {
+  if (!auth.isLoggedIn) return navigate('/login')
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    const data = await api('GET', '/inventories')
+    if (!data) return
+
+    const { inventories } = data
+    const listHTML = inventories.length === 0
+      ? `<div class="empty-state">
+           <div class="empty-state__icon">📦</div>
+           <div class="empty-state__title">No inventories yet</div>
+           <div class="empty-state__body">
+             Create your first inventory to start tracking your treasures.
+           </div>
+           <a href="/inventories/new" data-link class="btn btn-primary">Create inventory</a>
+         </div>`
+      : `<div class="item-list">
+           ${inventories.map(inv => `
+             <a href="/inventories/${inv.id}" data-link class="item-row">
+               <div class="item-row__photo item-row__photo--placeholder">📦</div>
+               <div class="item-row__info">
+                 <div class="item-row__name">${escapeHTML(inv.name)}</div>
+                 <div class="item-row__meta">${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
+               </div>
+               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="text-muted" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+             </a>
+           `).join('')}
+         </div>`
+
+    setHTML(`
+      <div class="page-header page-header-row">
+        <div>
+          <h1 class="page-title">My Inventories</h1>
+          <p class="page-subtitle">Your collections, organized</p>
+        </div>
+        <a href="/inventories/new" data-link class="btn btn-primary btn-sm">+ New</a>
+      </div>
+      ${listHTML}
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+function routeInventoryNew() {
+  if (!auth.isLoggedIn) return navigate('/login')
+  setHTML(`
+    <div>
+      <div class="page-header">
+        <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Back</a>
+        <h1 class="page-title mt-4">New Inventory</h1>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div id="form-error" role="alert"></div>
+          <form id="new-inventory-form">
+            <div class="field">
+              <label for="inv-name">Name</label>
+              <input type="text" id="inv-name" name="name" placeholder="e.g. Home, Workshop, Office" required autofocus>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Create inventory</button>
+              <a href="/inventories" data-link class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('new-inventory-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('form-error')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    try {
+      const data = await api('POST', '/inventories', { name: e.target.name.value })
+      if (data) navigate(`/inventories/${data.inventory.id}`)
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+      btn.disabled = false
+    }
+  })
+}
+
+async function routeInventory(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const inventoryId = matches[1]
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    const data = await api('GET', `/inventories/${inventoryId}`)
+    if (!data) return
+    const { inventory } = data
+
+    setHTML(`
+      <div>
+        <div class="page-header page-header-row">
+          <div>
+            <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Inventories</a>
+            <h1 class="page-title mt-4">${escapeHTML(inventory.name)}</h1>
+            <p class="page-subtitle">${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}</p>
+          </div>
+          <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>
+        </div>
+        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary btn-full mb-4">
+          View all items
+        </a>
+      </div>
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+async function routeItems(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const inventoryId = matches[1]
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    const [invData, itemsData] = await Promise.all([
+      api('GET', `/inventories/${inventoryId}`),
+      api('GET', `/inventories/${inventoryId}/items`),
+    ])
+    if (!invData || !itemsData) return
+
+    const { inventory } = invData
+    const { items } = itemsData
+
+    const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄' }
+
+    const listHTML = items.length === 0
+      ? `<div class="empty-state">
+           <div class="empty-state__icon">✨</div>
+           <div class="empty-state__title">Nothing stashed yet</div>
+           <div class="empty-state__body">Add your first item to start tracking.</div>
+           <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary">Add item</a>
+         </div>`
+      : `<div class="item-list">
+           ${items.map(item => `
+             <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
+               <div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>
+               <div class="item-row__info">
+                 <div class="item-row__name">${escapeHTML(item.name)}</div>
+                 <div class="item-row__meta">${escapeHTML(item.category_name ?? item.location_name ?? item.item_type)}</div>
+               </div>
+               <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
+             </a>
+           `).join('')}
+         </div>`
+
+    setHTML(`
+      <div>
+        <div class="page-header page-header-row">
+          <div>
+            <a href="/inventories/${inventoryId}" data-link class="btn btn-ghost btn-sm">← ${escapeHTML(inventory.name)}</a>
+            <h1 class="page-title mt-4">Items</h1>
+          </div>
+          <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
+        </div>
+        ${listHTML}
+      </div>
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+function routeItemNew(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const inventoryId = matches[1]
+  setHTML(`
+    <div>
+      <div class="page-header">
+        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
+        <h1 class="page-title mt-4">Add Item</h1>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div id="form-error" role="alert"></div>
+          <form id="new-item-form">
+            <div class="field">
+              <label for="item-name">Name <span aria-hidden="true">*</span></label>
+              <input type="text" id="item-name" name="name" required autofocus>
+            </div>
+            <div class="field">
+              <label for="item-qty">Quantity</label>
+              <quantity-stepper>
+                <button type="button" data-action="decrement" aria-label="Decrease">−</button>
+                <input type="number" id="item-qty" name="quantity" value="1" min="0" step="any">
+                <button type="button" data-action="increment" aria-label="Increase">+</button>
+              </quantity-stepper>
+            </div>
+            <div class="field">
+              <label for="item-unit">Unit</label>
+              <input type="text" id="item-unit" name="unit" placeholder="e.g. kg, boxes, units">
+            </div>
+            <div class="field">
+              <label for="item-type">Type</label>
+              <select id="item-type" name="item_type">
+                <option value="physical">Physical</option>
+                <option value="digital">Digital</option>
+                <option value="subscription">Subscription</option>
+                <option value="document">Document</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="item-desc">Description</label>
+              <textarea id="item-desc" name="description" rows="2"></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add item</button>
+              <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('new-item-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('form-error')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    try {
+      const data = await api('POST', `/inventories/${inventoryId}/items`, {
+        name: e.target.name.value,
+        quantity: Number(e.target.quantity.value),
+        unit: e.target.unit.value || undefined,
+        item_type: e.target.item_type.value,
+        description: e.target.description.value || undefined,
+      })
+      if (data) navigate(`/inventories/${inventoryId}/items/${data.item.id}`)
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+      btn.disabled = false
+    }
+  })
+}
+
+async function routeItem(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const [, inventoryId, itemId] = matches
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    const data = await api('GET', `/inventories/${inventoryId}/items/${itemId}`)
+    if (!data) return
+    const { item, logs } = data
+
+    const logsHTML = logs.length === 0
+      ? '<p class="text-sm text-muted">No usage history yet.</p>'
+      : logs.map(log => `
+          <div class="flex items-center gap-3 text-sm">
+            <span class="badge ${log.direction === 'used' ? 'badge-orange' : 'badge-green'}">
+              ${log.direction === 'used' ? '−' : '+'}${log.amount}
+            </span>
+            <span class="text-muted">${escapeHTML(log.user_name ?? 'Unknown')}</span>
+            <span class="text-muted">${formatDate(log.created_at)}</span>
+            ${log.note ? `<span class="text-muted">· ${escapeHTML(log.note)}</span>` : ''}
+          </div>
+        `).join('')
+
+    setHTML(`
+      <div>
+        <div class="page-header">
+          <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
+          <h1 class="page-title mt-4">${escapeHTML(item.name)}</h1>
+          ${item.category_name ? `<p class="page-subtitle">${escapeHTML(item.category_name)}</p>` : ''}
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <div class="text-xs text-muted font-medium" style="text-transform:uppercase;letter-spacing:.05em">Quantity</div>
+                <div style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2">
+                  ${item.quantity}${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
+                </div>
+              </div>
+              <quantity-stepper data-item-id="${item.id}" data-inventory-id="${inventoryId}">
+                <button type="button" data-action="decrement" aria-label="Use one">−</button>
+                <input type="number" value="1" min="0.01" step="any" aria-label="Amount">
+                <button type="button" data-action="increment" aria-label="Restock one">+</button>
+              </quantity-stepper>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" id="btn-use">Log use</button>
+              <button class="btn btn-secondary btn-sm" id="btn-restock">Restock</button>
+            </div>
+          </div>
+        </div>
+
+        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm">${escapeHTML(item.description)}</div></div>` : ''}
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="section-title" style="margin:0">Usage history</h2>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+            ${logsHTML}
+          </div>
+        </div>
+      </div>
+    `)
+
+    // Wire up use/restock buttons
+    async function logUse(direction) {
+      const stepper = document.querySelector('quantity-stepper input')
+      const amount = Number(stepper?.value ?? 1)
+      try {
+        const res = await api('POST', `/inventories/${inventoryId}/items/${itemId}/use`, {
+          amount, direction, note: ''
+        })
+        if (res) navigate(`/inventories/${inventoryId}/items/${itemId}`)
+      } catch (err) {
+        alert(err.message)
+      }
+    }
+
+    document.getElementById('btn-use').addEventListener('click', () => logUse('used'))
+    document.getElementById('btn-restock').addEventListener('click', () => logUse('restocked'))
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+function routeProfile() {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const user = auth.user
+  setHTML(`
+    <div>
+      <div class="page-header">
+        <h1 class="page-title">Profile</h1>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <p class="font-semi">${escapeHTML(user?.name ?? '')}</p>
+          <p class="text-sm text-muted mt-2">${escapeHTML(user?.email ?? '')}</p>
+          <div class="form-actions mt-6">
+            <button class="btn btn-danger btn-sm" id="btn-signout">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `)
+  document.getElementById('btn-signout').addEventListener('click', () => {
+    auth.clear()
+    navigate('/login')
+  })
+}
+
+async function routeInvite(matches) {
+  const token = matches[1]
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    // TODO: implement invite acceptance
+    setHTML(`
+      <div class="auth-page">
+        <div class="auth-card">
+          <div class="auth-logo"><div class="auth-logo__mark">🐼</div></div>
+          <h1 class="auth-title">You've been invited!</h1>
+          <p class="text-sm text-muted text-center">
+            ${auth.isLoggedIn ? 'Accept the invite to join.' : 'Sign in or create an account to accept.'}
+          </p>
+          <div class="form-actions mt-6">
+            ${auth.isLoggedIn
+              ? `<button class="btn btn-primary btn-full">Accept invite</button>`
+              : `<a href="/login" data-link class="btn btn-primary btn-full">Sign in to accept</a>`
+            }
+          </div>
+        </div>
+      </div>
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+// ─── Router core ─────────────────────────────────────────────────────────────
+
+export function navigate(path) {
+  history.pushState(null, '', path)
+  render(path)
+}
+
+function render(path) {
+  for (const { pattern, handler } of routes) {
+    const m = path.match(pattern)
+    if (m) {
+      setNav(auth.isLoggedIn)
+      handler(m)
+      return
+    }
+  }
+  // 404
+  setHTML(`
+    <div class="empty-state">
+      <div class="empty-state__icon">🤷</div>
+      <div class="empty-state__title">Page not found</div>
+      <div class="empty-state__body">That page doesn't seem to exist.</div>
+      <a href="/" data-link class="btn btn-primary">Go home</a>
+    </div>
+  `)
+}
+
+// Intercept all data-link clicks
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-link]')
+  if (!a || !a.href) return
+  const url = new URL(a.href)
+  if (url.origin !== location.origin) return
+  e.preventDefault()
+  navigate(url.pathname + url.search)
+})
+
+// Browser back/forward
+window.addEventListener('popstate', () => render(location.pathname))
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
+function escapeHTML(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function formatDate(unixSeconds) {
+  const d = new Date(Number(unixSeconds) * 1000)
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+render(location.pathname)

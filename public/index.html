@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2d6a4f">
+  <meta name="description" content="Inventory tracking for things you actually care about">
+  <title>Stash Panda</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="root">
+
+    <header class="app-header" id="app-header">
+      <a href="/" class="app-logo" data-link aria-label="Stash Panda home">
+        <span class="app-logo__mark" aria-hidden="true">🐼</span>
+        <span class="app-logo__name">Stash Panda</span>
+      </a>
+      <div class="app-header__actions" id="header-actions">
+        <!-- populated by router based on auth state -->
+      </div>
+    </header>
+
+    <main id="app" aria-live="polite" aria-atomic="false">
+      <div class="page-loader" aria-label="Loading…" role="status">
+        <div class="page-loader__spinner"></div>
+      </div>
+    </main>
+
+    <nav class="bottom-nav" id="bottom-nav" hidden aria-label="Navigation">
+      <a href="/inventories" class="bottom-nav__item" data-link data-nav="inventories">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>Inventories</span>
+      </a>
+      <a href="/profile" class="bottom-nav__item" data-link data-nav="profile">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        <span>Profile</span>
+      </a>
+    </nav>
+
+  </div>
+
+  <!-- Datastar: reactive UI + SSE DOM merging (no npm required) -->
+  <!-- https://data-star.dev -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@starfederation/datastar@latest/dist/datastar.min.js"></script>
+
+  <!-- App modules -->
+  <script type="module" src="/js/db.js"></script>
+  <script type="module" src="/js/components/quantity-stepper.js"></script>
+  <script type="module" src="/js/router.js"></script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(console.error)
+      })
+    }
+  </script>
+</body>
+</html>
