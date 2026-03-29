@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { randomUUID } from 'crypto'
 import { db } from '../db/client.ts'
 import { requireAuth } from '../middleware/auth.ts'
+import { sendVerificationEmail, sendPasswordResetEmail } from '../email.ts'
 
 const router = Router()
 
@@ -36,7 +37,7 @@ router.post('/signup', async (req, res) => {
       args: [id, name.trim(), email.toLowerCase(), passwordHash, verifyToken],
     })
 
-    // TODO: send email verification link with verifyToken
+    sendVerificationEmail(email.toLowerCase(), name.trim(), verifyToken)
 
     const token = jwt.sign(
       { id, email: email.toLowerCase(), name: name.trim() },
@@ -116,7 +117,7 @@ router.post('/forgot-password', async (req, res) => {
         sql: 'UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE email = ?',
         args: [resetToken, expires, email.toLowerCase()],
       })
-      // TODO: send password reset email with resetToken
+      sendPasswordResetEmail(email.toLowerCase(), resetToken)
     }
   } catch (err) {
     console.error('forgot-password:', err)
@@ -154,6 +155,30 @@ router.post('/reset-password', async (req, res) => {
     res.json({ message: 'Password updated. Please log in.' })
   } catch (err) {
     console.error('reset-password:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// GET /api/auth/verify-email?token=:token
+router.get('/verify-email', async (req, res) => {
+  const token = req.query.token as string
+  if (!token) return res.status(400).json({ error: 'Token is required' })
+
+  try {
+    const result = await db.execute({
+      sql: 'SELECT id FROM users WHERE email_verify_token = ?',
+      args: [token],
+    })
+    if (!result.rows[0]) {
+      return res.status(400).json({ error: 'Invalid or already used verification token' })
+    }
+    await db.execute({
+      sql: 'UPDATE users SET email_verified = 1, email_verify_token = NULL WHERE id = ?',
+      args: [result.rows[0].id],
+    })
+    res.json({ message: 'Email verified.' })
+  } catch (err) {
+    console.error('verify-email:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { db } from '../db/client.ts'
 import { requireAuth } from '../middleware/auth.ts'
+import { sendInviteEmail } from '../email.ts'
 import itemsRouter from './items.ts'
 
 const router = Router()
@@ -199,11 +200,17 @@ router.post('/:id/invite', requireAuth, async (req, res) => {
   if (!['editor', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
 
   try {
-    const owner = await db.execute({
-      sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role = 'owner'",
-      args: [id, req.user!.id],
-    })
-    if (!owner.rows[0]) return res.status(403).json({ error: 'Only the owner can invite members' })
+    const [ownerCheck, invResult] = await Promise.all([
+      db.execute({
+        sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role = 'owner'",
+        args: [id, req.user!.id],
+      }),
+      db.execute({
+        sql: 'SELECT name FROM inventories WHERE id = ?',
+        args: [id],
+      }),
+    ])
+    if (!ownerCheck.rows[0]) return res.status(403).json({ error: 'Only the owner can invite members' })
 
     const token = randomUUID()
     const expires = Math.floor(Date.now() / 1000) + 7 * 24 * 3600 // 7 days
@@ -214,7 +221,13 @@ router.post('/:id/invite', requireAuth, async (req, res) => {
       args: [token, id, email.toLowerCase(), role, req.user!.id, expires],
     })
 
-    // TODO: send invite email
+    sendInviteEmail(
+      email.toLowerCase(),
+      req.user!.name,
+      invResult.rows[0]?.name as string,
+      role,
+      token,
+    )
 
     res.json({ message: 'Invite sent' })
   } catch (err) {
