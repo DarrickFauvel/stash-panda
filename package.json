@@ -4,9 +4,10 @@
   "description": "Inventory tracking for things you actually care about",
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "migrate": "node server/db/migrate.js"
+    "start": "node server/index.ts",
+    "dev": "node --watch server/index.ts",
+    "migrate": "node server/db/migrate.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
@@ -17,5 +18,13 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.15"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.5.0",
+    "@types/nodemailer": "^7.0.11",
+    "typescript": "^6.0.2"
   }
 }

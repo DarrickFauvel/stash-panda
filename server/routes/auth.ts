@@ -2,8 +2,8 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'crypto'
-import { db } from '../db/client.js'
-import { requireAuth } from '../middleware/auth.js'
+import { db } from '../db/client.ts'
+import { requireAuth } from '../middleware/auth.ts'
 
 const router = Router()
 
@@ -40,7 +40,7 @@ router.post('/signup', async (req, res) => {
 
     const token = jwt.sign(
       { id, email: email.toLowerCase(), name: name.trim() },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
     res.status(201).json({ token, user: { id, name: name.trim(), email: email.toLowerCase() } })
@@ -66,14 +66,14 @@ router.post('/login', async (req, res) => {
 
     // Use constant-time comparison even on missing user to avoid timing attacks
     const hash = user?.password_hash ?? '$2b$12$invalidhashpadding000000000000000000000000000000000000'
-    const valid = await bcrypt.compare(password, hash)
+    const valid = await bcrypt.compare(password, hash as string)
     if (!user || !valid) {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
     const token = jwt.sign(
       { id: user.id, email: user.email, name: user.name },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
     res.json({ token, user: { id: user.id, name: user.name, email: user.email } })
@@ -88,7 +88,7 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
       sql: 'SELECT id, name, email, email_verified, created_at FROM users WHERE id = ?',
-      args: [req.user.id],
+      args: [req.user!.id],
     })
     if (!result.rows[0]) return res.status(404).json({ error: 'User not found' })
     res.json({ user: result.rows[0] })

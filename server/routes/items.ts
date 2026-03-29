@@ -1,27 +1,32 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
-import { db } from '../db/client.js'
-import { requireAuth } from '../middleware/auth.js'
+import type { InValue } from '@libsql/client'
+import { db } from '../db/client.ts'
+import { requireAuth } from '../middleware/auth.ts'
 
 // mergeParams: true so :inventoryId is accessible from the parent router
 const router = Router({ mergeParams: true })
 
-async function getMemberRole(inventoryId, userId) {
+async function getMemberRole(inventoryId: string, userId: string): Promise<string | null> {
   const result = await db.execute({
     sql: 'SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ?',
     args: [inventoryId, userId],
   })
-  return result.rows[0]?.role ?? null
+  return result.rows[0]?.role as string ?? null
 }
 
 // GET /api/inventories/:inventoryId/items
 router.get('/', requireAuth, async (req, res) => {
-  const { inventoryId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role) return res.status(403).json({ error: 'Access denied' })
 
-  const { q, category, location, type, sort = 'name' } = req.query
-  const sortMap = {
+  const q = req.query.q as string | undefined
+  const category = req.query.category as string | undefined
+  const location = req.query.location as string | undefined
+  const type = req.query.type as string | undefined
+  const sort = (req.query.sort as string | undefined) ?? 'name'
+  const sortMap: Record<string, string> = {
     name: 'i.name ASC',
     quantity: 'i.quantity DESC',
     added: 'i.created_at DESC',
@@ -32,7 +37,7 @@ router.get('/', requireAuth, async (req, res) => {
 
   try {
     const conditions = ['i.inventory_id = ?']
-    const args = [inventoryId]
+    const args: InValue[] = [inventoryId]
 
     if (q) {
       conditions.push('(i.name LIKE ? OR i.description LIKE ? OR i.tags LIKE ?)')
@@ -63,8 +68,8 @@ router.get('/', requireAuth, async (req, res) => {
 
 // POST /api/inventories/:inventoryId/items
 router.post('/', requireAuth, async (req, res) => {
-  const { inventoryId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
 
   const {
@@ -88,7 +93,7 @@ router.post('/', requireAuth, async (req, res) => {
         JSON.stringify(tags), value || null,
         purchase_date || null, expiry_date || null, barcode || null,
         description || null, item_type, JSON.stringify(custom_fields),
-        req.user.id,
+        req.user!.id,
       ],
     })
     const result = await db.execute({ sql: 'SELECT * FROM items WHERE id = ?', args: [id] })
@@ -101,8 +106,8 @@ router.post('/', requireAuth, async (req, res) => {
 
 // GET /api/inventories/:inventoryId/items/:itemId
 router.get('/:itemId', requireAuth, async (req, res) => {
-  const { inventoryId, itemId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role) return res.status(403).json({ error: 'Access denied' })
 
   try {
@@ -141,8 +146,8 @@ router.get('/:itemId', requireAuth, async (req, res) => {
 
 // PATCH /api/inventories/:inventoryId/items/:itemId
 router.patch('/:itemId', requireAuth, async (req, res) => {
-  const { inventoryId, itemId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
 
   const allowed = [
@@ -151,8 +156,8 @@ router.patch('/:itemId', requireAuth, async (req, res) => {
     'item_type', 'custom_fields',
   ]
   const jsonFields = new Set(['tags', 'custom_fields'])
-  const setClauses = []
-  const args = []
+  const setClauses: string[] = []
+  const args: InValue[] = []
 
   for (const field of allowed) {
     if (req.body[field] !== undefined) {
@@ -180,8 +185,8 @@ router.patch('/:itemId', requireAuth, async (req, res) => {
 
 // DELETE /api/inventories/:inventoryId/items/:itemId
 router.delete('/:itemId', requireAuth, async (req, res) => {
-  const { inventoryId, itemId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
 
   try {
@@ -197,8 +202,8 @@ router.delete('/:itemId', requireAuth, async (req, res) => {
 
 // POST /api/inventories/:inventoryId/items/:itemId/use — log a use or restock
 router.post('/:itemId/use', requireAuth, async (req, res) => {
-  const { inventoryId, itemId } = req.params
-  const role = await getMemberRole(inventoryId, req.user.id)
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
   if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
 
   const { amount, direction, note } = req.body
@@ -226,7 +231,7 @@ router.post('/:itemId/use', requireAuth, async (req, res) => {
       {
         sql: `INSERT INTO usage_logs (id, item_id, user_id, direction, amount, quantity_after, note)
               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [logId, itemId, req.user.id, direction, Math.abs(Number(amount)), newQty, note || null],
+        args: [logId, itemId, req.user!.id, direction, Math.abs(Number(amount)), newQty, note || null],
       },
     ])
 

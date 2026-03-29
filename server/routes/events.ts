@@ -1,18 +1,16 @@
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
+import type { Response } from 'express'
 
 const router = Router()
 
 // inventoryId -> Set of SSE response objects
-const clients = new Map()
+const clients = new Map<string, Set<Response>>()
 
 /**
  * Broadcast a Datastar-compatible SSE event to all members of an inventory.
- * @param {string} inventoryId
- * @param {'datastar-merge-fragments'|'datastar-merge-signals'|string} eventName
- * @param {string} data  — raw event data string
  */
-export function broadcast(inventoryId, eventName, data) {
+export function broadcast(inventoryId: string, eventName: string, data: string) {
   const subs = clients.get(inventoryId)
   if (!subs?.size) return
   const payload = `event: ${eventName}\ndata: ${data}\n\n`
@@ -27,9 +25,9 @@ router.get('/', (req, res) => {
   const { token, inventory: inventoryId } = req.query
   if (!token || !inventoryId) return res.status(400).end()
 
-  let user
+  let user: { id: string }
   try {
-    user = jwt.verify(token, process.env.JWT_SECRET)
+    user = jwt.verify(token as string, process.env.JWT_SECRET!) as { id: string }
   } catch {
     return res.status(401).end()
   }
@@ -45,8 +43,8 @@ router.get('/', (req, res) => {
   // Confirm connection
   res.write(`event: connected\ndata: ${JSON.stringify({ userId: user.id })}\n\n`)
 
-  if (!clients.has(inventoryId)) clients.set(inventoryId, new Set())
-  const inventoryClients = clients.get(inventoryId)
+  if (!clients.has(inventoryId as string)) clients.set(inventoryId as string, new Set())
+  const inventoryClients = clients.get(inventoryId as string)!
   inventoryClients.add(res)
 
   // Keep-alive ping every 30s
@@ -55,7 +53,7 @@ router.get('/', (req, res) => {
   req.on('close', () => {
     clearInterval(keepAlive)
     inventoryClients.delete(res)
-    if (inventoryClients.size === 0) clients.delete(inventoryId)
+    if (inventoryClients.size === 0) clients.delete(inventoryId as string)
   })
 })
 

@@ -653,6 +653,49 @@ quantity-stepper input[type="number"] {
 .gap-3         { gap: var(--space-3); }
 .gap-4         { gap: var(--space-4); }
 
+/* ─── Member rows ────────────────────────────────────────────────────────── */
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.member-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full);
+  background: var(--c-brand-light);
+  color: var(--c-brand);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-info .font-medium {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-select {
+  width: auto;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+  cursor: pointer;
+}
+
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (min-width: 640px) {
   :root {

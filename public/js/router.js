@@ -103,6 +103,7 @@ function routeHome() {
 
 function routeLogin() {
   if (auth.isLoggedIn) return navigate('/inventories')
+  const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
   setHTML(`
     <div class="auth-page">
       <div class="auth-card">
@@ -126,7 +127,7 @@ function routeLogin() {
           </div>
         </form>
         <div class="auth-footer">
-          No account? <a href="/signup" data-link>Create one</a>
+          No account? <a href="/signup${redirect !== '/inventories' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Create one</a>
         </div>
       </div>
     </div>
@@ -146,7 +147,7 @@ function routeLogin() {
       })
       if (data) {
         auth.save(data.token, data.user)
-        navigate('/inventories')
+        navigate(redirect)
       }
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
@@ -158,6 +159,7 @@ function routeLogin() {
 
 function routeSignup() {
   if (auth.isLoggedIn) return navigate('/inventories')
+  const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
   setHTML(`
     <div class="auth-page">
       <div class="auth-card">
@@ -186,7 +188,7 @@ function routeSignup() {
           </div>
         </form>
         <div class="auth-footer">
-          Already have an account? <a href="/login" data-link>Sign in</a>
+          Already have an account? <a href="/login${redirect !== '/inventories' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Sign in</a>
         </div>
       </div>
     </div>
@@ -207,7 +209,7 @@ function routeSignup() {
       })
       if (data) {
         auth.save(data.token, data.user)
-        navigate('/inventories')
+        navigate(redirect)
       }
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
@@ -311,25 +313,208 @@ async function routeInventory(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const data = await api('GET', `/inventories/${inventoryId}`)
-    if (!data) return
-    const { inventory } = data
+    const [invData, membersData] = await Promise.all([
+      api('GET', `/inventories/${inventoryId}`),
+      api('GET', `/inventories/${inventoryId}/members`),
+    ])
+    if (!invData || !membersData) return
+
+    const { inventory } = invData
+    const { members } = membersData
+    const isOwner = inventory.role === 'owner'
+    const canEdit = inventory.role === 'owner' || inventory.role === 'editor'
+
+    const roleBadgeClass = { owner: 'badge-green', editor: 'badge-orange', viewer: 'badge-gray' }
+    const roleLabel = { owner: 'Owner', editor: 'Editor', viewer: 'Viewer' }
+
+    const membersHTML = members.map(m => `
+      <div class="member-row">
+        <div class="member-avatar">${escapeHTML(m.name[0].toUpperCase())}</div>
+        <div class="member-info">
+          <div class="font-medium">${escapeHTML(m.name)}</div>
+          <div class="text-xs text-muted">${escapeHTML(m.email)}</div>
+        </div>
+        ${isOwner && m.id !== auth.user?.id ? `
+          <select class="role-select" data-user-id="${m.id}" data-current="${m.role}" aria-label="Change role for ${escapeHTML(m.name)}">
+            <option value="editor" ${m.role === 'editor' ? 'selected' : ''}>Editor</option>
+            <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+          </select>
+          <button class="btn btn-ghost btn-sm btn-remove-member" data-user-id="${m.id}" data-name="${escapeHTML(m.name)}" aria-label="Remove ${escapeHTML(m.name)}">✕</button>
+        ` : `<span class="badge ${roleBadgeClass[m.role]}">${roleLabel[m.role]}</span>`}
+      </div>
+    `).join('')
 
     setHTML(`
       <div>
-        <div class="page-header page-header-row">
-          <div>
-            <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Inventories</a>
-            <h1 class="page-title mt-4">${escapeHTML(inventory.name)}</h1>
-            <p class="page-subtitle">${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}</p>
+        <div class="page-header">
+          <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Inventories</a>
+          <div class="page-header-row mt-4">
+            <div>
+              <h1 class="page-title">${escapeHTML(inventory.name)}</h1>
+              <p class="page-subtitle">
+                ${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}
+                · <span class="badge ${roleBadgeClass[inventory.role]}">${roleLabel[inventory.role]}</span>
+              </p>
+            </div>
+            ${canEdit ? `<a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>` : ''}
           </div>
-          <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>
         </div>
-        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary btn-full mb-4">
-          View all items
+
+        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary btn-full mb-6">
+          Browse items →
         </a>
+
+        <!-- Members -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h2 class="font-semi">Members <span class="text-muted font-normal">(${members.length})</span></h2>
+            ${isOwner ? `<button class="btn btn-ghost btn-sm" id="btn-invite-toggle">+ Invite</button>` : ''}
+          </div>
+
+          ${isOwner ? `
+          <div id="invite-form-wrap" hidden style="border-bottom:1px solid var(--c-border)">
+            <div class="card-body">
+              <div id="invite-msg" role="alert"></div>
+              <form id="invite-form">
+                <div class="field">
+                  <label for="invite-email">Email address</label>
+                  <input type="email" id="invite-email" name="email" required placeholder="teammate@example.com">
+                </div>
+                <div class="field">
+                  <label for="invite-role">Role</label>
+                  <select id="invite-role" name="role">
+                    <option value="editor">Editor — can add and edit items</option>
+                    <option value="viewer">Viewer — read only</option>
+                  </select>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary btn-sm">Send invite</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-invite-cancel">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          ` : ''}
+
+          <div class="card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+            ${membersHTML}
+          </div>
+        </div>
+
+        ${isOwner ? `
+        <!-- Settings -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h2 class="font-semi">Settings</h2>
+          </div>
+          <div class="card-body">
+            <p class="text-sm text-muted mb-3">Rename this inventory</p>
+            <div id="rename-msg" role="alert"></div>
+            <form id="rename-form" class="flex gap-3 items-center">
+              <div class="field" style="flex:1;margin:0">
+                <input type="text" id="rename-input" name="name" value="${escapeHTML(inventory.name)}" required>
+              </div>
+              <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Danger zone -->
+        <div class="card" style="border-color:#fecaca">
+          <div class="card-header">
+            <h2 class="font-semi" style="color:var(--c-danger)">Danger zone</h2>
+          </div>
+          <div class="card-body">
+            <p class="text-sm text-muted mb-4">
+              Permanently delete this inventory and all its items. There is no undo.
+            </p>
+            <button class="btn btn-danger btn-sm" id="btn-delete-inv">Delete inventory</button>
+          </div>
+        </div>
+        ` : ''}
       </div>
     `)
+
+    // ── Invite toggle ──────────────────────────────────────────────────────
+    if (isOwner) {
+      const inviteWrap = document.getElementById('invite-form-wrap')
+      document.getElementById('btn-invite-toggle').addEventListener('click', () => {
+        inviteWrap.hidden = false
+        document.getElementById('invite-email').focus()
+      })
+      document.getElementById('btn-invite-cancel').addEventListener('click', () => {
+        inviteWrap.hidden = true
+      })
+
+      document.getElementById('invite-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const btn = e.target.querySelector('[type=submit]')
+        const msgEl = document.getElementById('invite-msg')
+        msgEl.innerHTML = ''
+        btn.disabled = true
+        try {
+          await api('POST', `/inventories/${inventoryId}/invite`, {
+            email: e.target.email.value,
+            role: e.target.role.value,
+          })
+          inviteWrap.hidden = true
+          e.target.reset()
+          msgEl.innerHTML = '<div class="alert alert-success mb-4">Invite sent!</div>'
+          setTimeout(() => { msgEl.innerHTML = '' }, 4000)
+        } catch (err) {
+          msgEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+        } finally {
+          btn.disabled = false
+        }
+      })
+
+      // ── Role changes ───────────────────────────────────────────────────
+      document.querySelectorAll('.role-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const prev = sel.dataset.current
+          try {
+            await api('PATCH', `/inventories/${inventoryId}/members/${sel.dataset.userId}`, { role: sel.value })
+            sel.dataset.current = sel.value
+          } catch (err) {
+            alert(err.message)
+            sel.value = prev
+          }
+        })
+      })
+
+      // ── Remove member ──────────────────────────────────────────────────
+      document.querySelectorAll('.btn-remove-member').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Remove ${btn.dataset.name} from this inventory?`)) return
+          try {
+            await api('DELETE', `/inventories/${inventoryId}/members/${btn.dataset.userId}`)
+            navigate(`/inventories/${inventoryId}`)
+          } catch (err) { alert(err.message) }
+        })
+      })
+
+      // ── Rename ─────────────────────────────────────────────────────────
+      document.getElementById('rename-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const msgEl = document.getElementById('rename-msg')
+        msgEl.innerHTML = ''
+        try {
+          await api('PATCH', `/inventories/${inventoryId}`, { name: e.target.name.value.trim() })
+          navigate(`/inventories/${inventoryId}`)
+        } catch (err) {
+          msgEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+        }
+      })
+
+      // ── Delete inventory ───────────────────────────────────────────────
+      document.getElementById('btn-delete-inv').addEventListener('click', async () => {
+        if (!confirm(`Delete "${inventory.name}" and all its items? This cannot be undone.`)) return
+        try {
+          await api('DELETE', `/inventories/${inventoryId}`)
+          navigate('/inventories')
+        } catch (err) { alert(err.message) }
+      })
+    }
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
@@ -580,26 +765,70 @@ async function routeInvite(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    // TODO: implement invite acceptance
+    const data = await api('GET', `/invite/${token}`)
+    if (!data) return
+
+    const { inventory, role, invited_by_name } = data
+    const roleLabel = { editor: 'Editor', viewer: 'Viewer' }
+    const encodedRedirect = encodeURIComponent(`/invite/${token}`)
+
+    setHTML(`
+      <div class="auth-page">
+        <div class="auth-card">
+          <div class="auth-logo">
+            <div class="auth-logo__mark">🐼</div>
+            <div class="auth-logo__name">Stash Panda</div>
+          </div>
+          <h1 class="auth-title">You're invited!</h1>
+          <p class="text-sm text-muted text-center" style="line-height:1.6">
+            <strong>${escapeHTML(invited_by_name)}</strong> invited you to join<br>
+            <strong>${escapeHTML(inventory.name)}</strong>
+            as a <span class="badge badge-${role === 'editor' ? 'orange' : 'gray'}">${roleLabel[role] ?? role}</span>.
+          </p>
+          <div id="invite-error" role="alert"></div>
+          <div class="form-actions mt-6" style="flex-direction:column">
+            ${auth.isLoggedIn
+              ? `<button class="btn btn-primary btn-full btn-lg" id="btn-accept">Accept &amp; join</button>`
+              : `<a href="/login?redirect=${encodedRedirect}" data-link class="btn btn-primary btn-full btn-lg">Sign in to accept</a>
+                 <a href="/signup?redirect=${encodedRedirect}" data-link class="btn btn-secondary btn-full">Create account</a>`
+            }
+          </div>
+          ${auth.isLoggedIn ? `<p class="auth-footer">Joining as <strong>${escapeHTML(auth.user?.name ?? '')}</strong></p>` : ''}
+        </div>
+      </div>
+    `)
+
+    if (auth.isLoggedIn) {
+      document.getElementById('btn-accept').addEventListener('click', async e => {
+        const btn = e.currentTarget
+        btn.disabled = true
+        btn.textContent = 'Joining…'
+        try {
+          const res = await api('POST', `/invite/${token}/accept`)
+          if (res) navigate(`/inventories/${res.inventory_id}`)
+        } catch (err) {
+          document.getElementById('invite-error').innerHTML =
+            `<div class="alert alert-error mt-4">${err.message}</div>`
+          btn.disabled = false
+          btn.textContent = 'Accept & join'
+        }
+      })
+    }
+  } catch {
     setHTML(`
       <div class="auth-page">
         <div class="auth-card">
           <div class="auth-logo"><div class="auth-logo__mark">🐼</div></div>
-          <h1 class="auth-title">You've been invited!</h1>
+          <h1 class="auth-title">Invite not found</h1>
           <p class="text-sm text-muted text-center">
-            ${auth.isLoggedIn ? 'Accept the invite to join.' : 'Sign in or create an account to accept.'}
+            This invite may have expired or already been used.
           </p>
           <div class="form-actions mt-6">
-            ${auth.isLoggedIn
-              ? `<button class="btn btn-primary btn-full">Accept invite</button>`
-              : `<a href="/login" data-link class="btn btn-primary btn-full">Sign in to accept</a>`
-            }
+            <a href="/" data-link class="btn btn-primary btn-full">Go home</a>
           </div>
         </div>
       </div>
     `)
-  } catch (err) {
-    setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
 }
 

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { db } from './client.js'
+import { db } from './client.ts'
 
 const schema = `
 CREATE TABLE IF NOT EXISTS users (

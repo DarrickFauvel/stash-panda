@@ -4,9 +4,10 @@ import { Eta } from 'eta'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
-import authRoutes from './routes/auth.js'
-import inventoryRoutes from './routes/inventories.js'
-import eventsRoutes from './routes/events.js'
+import authRoutes from './routes/auth.ts'
+import inventoryRoutes from './routes/inventories.ts'
+import inviteRoutes from './routes/invite.ts'
+import eventsRoutes from './routes/events.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
@@ -25,6 +26,7 @@ app.use(express.static(join(root, 'public')))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/inventories', inventoryRoutes)
+app.use('/api/invite', inviteRoutes)
 app.use('/events', eventsRoutes)
 
 // SPA fallback — serves app shell for all non-API routes
