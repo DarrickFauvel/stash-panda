@@ -1046,7 +1046,7 @@ async function routeItemNew(matches) {
         })
       })
     } catch (err) {
-      bggStatus.textContent = 'Search failed.'
+      bggStatus.textContent = err.message?.includes('credentials') ? err.message : 'Search failed.'
     }
   }
 
