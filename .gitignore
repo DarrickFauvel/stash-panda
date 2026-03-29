@@ -6,3 +6,4 @@ local.db-wal
 uploads/
 *.log
 .DS_Store
+uploads/

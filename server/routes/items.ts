@@ -1,8 +1,23 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
+import { unlink } from 'fs/promises'
+import { join } from 'path'
+import multer from 'multer'
+import { extname } from 'path'
 import type { InValue } from '@libsql/client'
 import { db } from '../db/client.ts'
 import { requireAuth } from '../middleware/auth.ts'
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+})
 
 // mergeParams: true so :inventoryId is accessible from the parent router
 const router = Router({ mergeParams: true })
@@ -241,6 +256,51 @@ router.post('/:itemId/use', requireAuth, async (req, res) => {
     })
   } catch (err) {
     console.error('log use:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// POST /api/inventories/:inventoryId/items/:itemId/photos
+router.post('/:itemId/photos', requireAuth, upload.single('photo'), async (req, res) => {
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
+  if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
+  if (!req.file) return res.status(400).json({ error: 'No image provided' })
+
+  const id = randomUUID()
+  const url = `/uploads/${req.file.filename}`
+  try {
+    await db.execute({
+      sql: 'INSERT INTO item_photos (id, item_id, url, uploaded_by) VALUES (?, ?, ?, ?)',
+      args: [id, itemId, url, req.user!.id],
+    })
+    res.status(201).json({ photo: { id, item_id: itemId, url } })
+  } catch (err) {
+    await unlink(join(UPLOAD_DIR, req.file.filename)).catch(() => {})
+    console.error('upload photo:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// DELETE /api/inventories/:inventoryId/items/:itemId/photos/:photoId
+router.delete('/:itemId/photos/:photoId', requireAuth, async (req, res) => {
+  const { inventoryId, itemId, photoId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
+  if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
+
+  try {
+    const result = await db.execute({
+      sql: 'SELECT url FROM item_photos WHERE id = ? AND item_id = ?',
+      args: [photoId, itemId],
+    })
+    if (!result.rows[0]) return res.status(404).json({ error: 'Photo not found' })
+
+    const filename = (result.rows[0].url as string).replace('/uploads/', '')
+    await db.execute({ sql: 'DELETE FROM item_photos WHERE id = ?', args: [photoId] })
+    await unlink(join(UPLOAD_DIR, filename)).catch(() => {})
+    res.status(204).end()
+  } catch (err) {
+    console.error('delete photo:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

@@ -656,7 +656,7 @@ async function routeItem(matches) {
   try {
     const data = await api('GET', `/inventories/${inventoryId}/items/${itemId}`)
     if (!data) return
-    const { item, logs } = data
+    const { item, photos, logs } = data
 
     const logsHTML = logs.length === 0
       ? '<p class="text-sm text-muted">No usage history yet.</p>'
@@ -670,6 +670,24 @@ async function routeItem(matches) {
             ${log.note ? `<span class="text-muted">· ${escapeHTML(log.note)}</span>` : ''}
           </div>
         `).join('')
+
+    function photosHTML(photoList) {
+      return `
+        <div class="photo-gallery" id="photo-gallery">
+          ${photoList.map(p => `
+            <div class="photo-gallery__item" data-photo-id="${p.id}">
+              <img src="${p.url}" alt="Item photo" loading="lazy">
+              <button class="photo-gallery__delete" aria-label="Delete photo" data-photo-id="${p.id}">×</button>
+            </div>
+          `).join('')}
+          <label class="photo-gallery__add" aria-label="Add photo">
+            <input type="file" accept="image/*" capture="environment" id="photo-input" style="display:none">
+            <span class="photo-gallery__add-icon">📷</span>
+            <span class="text-xs">Add photo</span>
+          </label>
+        </div>
+      `
+    }
 
     setHTML(`
       <div>
@@ -698,6 +716,15 @@ async function routeItem(matches) {
               <button class="btn btn-secondary btn-sm" id="btn-use">Log use</button>
               <button class="btn btn-secondary btn-sm" id="btn-restock">Restock</button>
             </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <h2 class="section-title" style="margin:0">Photos</h2>
+          </div>
+          <div class="card-body">
+            ${photosHTML(photos)}
           </div>
         </div>
 
@@ -730,6 +757,41 @@ async function routeItem(matches) {
 
     document.getElementById('btn-use').addEventListener('click', () => logUse('used'))
     document.getElementById('btn-restock').addEventListener('click', () => logUse('restocked'))
+
+    // Wire up photo upload
+    document.getElementById('photo-input').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      const form = new FormData()
+      form.append('photo', file)
+      try {
+        const headers = {}
+        if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
+        const res = await fetch(`/api/inventories/${inventoryId}/items/${itemId}/photos`, {
+          method: 'POST', headers, body: form,
+        })
+        if (res.status === 401) { auth.clear(); return navigate('/login') }
+        if (!res.ok) { const d = await res.json().catch(() => null); throw new Error(d?.error ?? 'Upload failed') }
+        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+
+    // Wire up photo delete
+    document.getElementById('photo-gallery').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-photo-id].photo-gallery__delete')
+      if (!btn) return
+      if (!confirm('Delete this photo?')) return
+      const photoId = btn.dataset.photoId
+      try {
+        await api('DELETE', `/inventories/${inventoryId}/items/${itemId}/photos/${photoId}`)
+        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
