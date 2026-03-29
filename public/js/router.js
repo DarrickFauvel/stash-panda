@@ -366,14 +366,18 @@ async function routeInventory(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const [invData, membersData] = await Promise.all([
+    const [invData, membersData, locData, catData] = await Promise.all([
       api('GET', `/inventories/${inventoryId}`),
       api('GET', `/inventories/${inventoryId}/members`),
+      api('GET', `/inventories/${inventoryId}/locations`),
+      api('GET', `/inventories/${inventoryId}/categories`),
     ])
     if (!invData || !membersData) return
 
     const { inventory } = invData
     const { members } = membersData
+    let locations = locData?.locations ?? []
+    let categories = catData?.categories ?? []
     const isOwner = inventory.role === 'owner'
     const canEdit = inventory.role === 'owner' || inventory.role === 'editor'
 
@@ -416,6 +420,48 @@ async function routeInventory(matches) {
         <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary btn-full mb-6">
           Browse items →
         </a>
+
+        <!-- Locations & Categories -->
+        ${canEdit ? `
+        <div class="card mb-4">
+          <div class="card-header"><h2 class="font-semi">Organize</h2></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:var(--space-5)">
+
+            <div>
+              <div class="text-sm font-medium mb-2">Locations</div>
+              <div class="tag-list mb-3" id="loc-list">
+                ${locations.map(l => `
+                  <span class="tag" data-loc-id="${l.id}">
+                    ${escapeHTML(l.name)}
+                    <button class="tag__remove" data-loc-id="${l.id}" aria-label="Remove ${escapeHTML(l.name)}">×</button>
+                  </span>
+                `).join('')}
+              </div>
+              <form id="add-loc-form" class="inline-add-form">
+                <input type="text" id="loc-input" placeholder="Add location…" maxlength="80">
+                <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+              </form>
+            </div>
+
+            <div>
+              <div class="text-sm font-medium mb-2">Categories</div>
+              <div class="tag-list mb-3" id="cat-list">
+                ${categories.map(c => `
+                  <span class="tag" data-cat-id="${c.id}">
+                    ${escapeHTML(c.name)}
+                    <button class="tag__remove" data-cat-id="${c.id}" aria-label="Remove ${escapeHTML(c.name)}">×</button>
+                  </span>
+                `).join('')}
+              </div>
+              <form id="add-cat-form" class="inline-add-form">
+                <input type="text" id="cat-input" placeholder="Add category…" maxlength="80">
+                <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+              </form>
+            </div>
+
+          </div>
+        </div>
+        ` : ''}
 
         <!-- Members -->
         <div class="card mb-4">
@@ -487,6 +533,55 @@ async function routeInventory(matches) {
         ` : ''}
       </div>
     `)
+
+    // ── Locations & Categories ─────────────────────────────────────────────
+    if (canEdit) {
+      function renderTags(list, containerId, idAttr, deletePath) {
+        const el = document.getElementById(containerId)
+        el.innerHTML = list.map(item => `
+          <span class="tag">
+            ${escapeHTML(item.name)}
+            <button class="tag__remove" data-id="${item.id}" aria-label="Remove ${escapeHTML(item.name)}">×</button>
+          </span>
+        `).join('')
+        el.querySelectorAll('.tag__remove').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await api('DELETE', `/inventories/${inventoryId}/${deletePath}/${btn.dataset.id}`)
+              list.splice(list.findIndex(i => i.id === btn.dataset.id), 1)
+              renderTags(list, containerId, idAttr, deletePath)
+            } catch (err) { alert(err.message) }
+          })
+        })
+      }
+
+      renderTags(locations, 'loc-list', 'loc-id', 'locations')
+      renderTags(categories, 'cat-list', 'cat-id', 'categories')
+
+      document.getElementById('add-loc-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const input = document.getElementById('loc-input')
+        const name = input.value.trim()
+        if (!name) return
+        try {
+          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name })
+          if (data) { locations.push(data.location); renderTags(locations, 'loc-list', 'loc-id', 'locations') }
+          input.value = ''
+        } catch (err) { alert(err.message) }
+      })
+
+      document.getElementById('add-cat-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const input = document.getElementById('cat-input')
+        const name = input.value.trim()
+        if (!name) return
+        try {
+          const data = await api('POST', `/inventories/${inventoryId}/categories`, { name })
+          if (data) { categories.push(data.category); renderTags(categories, 'cat-list', 'cat-id', 'categories') }
+          input.value = ''
+        } catch (err) { alert(err.message) }
+      })
+    }
 
     // ── Invite toggle ──────────────────────────────────────────────────────
     if (isOwner) {
@@ -627,9 +722,23 @@ async function routeItems(matches) {
   }
 }
 
-function routeItemNew(matches) {
+async function routeItemNew(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
   const inventoryId = matches[1]
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  const [locData, catData] = await Promise.all([
+    api('GET', `/inventories/${inventoryId}/locations`),
+    api('GET', `/inventories/${inventoryId}/categories`),
+  ])
+  const locations = locData?.locations ?? []
+  const categories = catData?.categories ?? []
+
+  const locOptions = `<option value="">— None —</option>` +
+    locations.map(l => `<option value="${l.id}">${escapeHTML(l.name)}</option>`).join('')
+  const catOptions = `<option value="">— None —</option>` +
+    categories.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('')
+
   setHTML(`
     <div>
       <div class="page-header">
@@ -656,6 +765,16 @@ function routeItemNew(matches) {
               <label for="item-unit">Unit</label>
               <input type="text" id="item-unit" name="unit" placeholder="e.g. kg, boxes, units">
             </div>
+            ${locations.length ? `
+            <div class="field">
+              <label for="item-location">Location</label>
+              <select id="item-location" name="location_id">${locOptions}</select>
+            </div>` : ''}
+            ${categories.length ? `
+            <div class="field">
+              <label for="item-category">Category</label>
+              <select id="item-category" name="category_id">${catOptions}</select>
+            </div>` : ''}
             <div class="field">
               <label for="item-type">Type</label>
               <select id="item-type" name="item_type">
@@ -690,6 +809,8 @@ function routeItemNew(matches) {
         name: e.target.name.value,
         quantity: Number(e.target.quantity.value),
         unit: e.target.unit.value || undefined,
+        location_id: e.target.location_id?.value || undefined,
+        category_id: e.target.category_id?.value || undefined,
         item_type: e.target.item_type.value,
         description: e.target.description.value || undefined,
       })

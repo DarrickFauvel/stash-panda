@@ -344,4 +344,36 @@ router.post('/:id/locations', requireAuth, async (req, res) => {
   }
 })
 
+// DELETE /api/inventories/:id/categories/:categoryId
+router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
+  const { id, categoryId } = req.params as Record<string, string>
+  try {
+    const access = await db.execute({
+      sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
+      args: [id, req.user!.id],
+    })
+    if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
+    await db.execute({ sql: 'DELETE FROM categories WHERE id = ? AND inventory_id = ?', args: [categoryId, id] })
+    res.status(204).end()
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// DELETE /api/inventories/:id/locations/:locationId
+router.delete('/:id/locations/:locationId', requireAuth, async (req, res) => {
+  const { id, locationId } = req.params as Record<string, string>
+  try {
+    const access = await db.execute({
+      sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
+      args: [id, req.user!.id],
+    })
+    if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
+    await db.execute({ sql: 'DELETE FROM locations WHERE id = ? AND inventory_id = ?', args: [locationId, id] })
+    res.status(204).end()
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 export default router
