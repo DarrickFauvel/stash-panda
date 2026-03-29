@@ -237,16 +237,19 @@ async function routeInventories() {
            </div>
            <a href="/inventories/new" data-link class="btn btn-primary">Create inventory</a>
          </div>`
-      : `<div class="item-list">
+      : `<div class="item-list" id="inv-list">
            ${inventories.map(inv => `
-             <a href="/inventories/${inv.id}" data-link class="item-row">
-               <div class="item-row__photo item-row__photo--placeholder">${inventoryIcon(inv.name)}</div>
-               <div class="item-row__info">
-                 <div class="item-row__name">${escapeHTML(inv.name)}</div>
-                 <div class="item-row__meta">${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
-               </div>
+             <div class="item-row inv-row" draggable="true" data-id="${inv.id}">
+               <span class="drag-handle" aria-hidden="true">⠿</span>
+               <a href="/inventories/${inv.id}" data-link class="inv-row__link">
+                 <div class="item-row__photo item-row__photo--placeholder">${inventoryIcon(inv.name)}</div>
+                 <div class="item-row__info">
+                   <div class="item-row__name">${escapeHTML(inv.name)}</div>
+                   <div class="item-row__meta">${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
+                 </div>
+               </a>
                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="text-muted" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-             </a>
+             </div>
            `).join('')}
          </div>`
 
@@ -260,6 +263,56 @@ async function routeInventories() {
       </div>
       ${listHTML}
     `)
+
+    if (inventories.length > 1) {
+      const list = document.getElementById('inv-list')
+      let dragSrc = null
+
+      list.addEventListener('dragstart', e => {
+        dragSrc = e.target.closest('.inv-row')
+        if (!dragSrc) return
+        dragSrc.classList.add('inv-row--dragging')
+        e.dataTransfer.effectAllowed = 'move'
+      })
+
+      list.addEventListener('dragover', e => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        const target = e.target.closest('.inv-row')
+        if (!target || target === dragSrc) return
+        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over'))
+        target.classList.add('inv-row--drag-over')
+      })
+
+      list.addEventListener('dragleave', e => {
+        if (!e.relatedTarget?.closest?.('#inv-list')) {
+          list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over'))
+        }
+      })
+
+      list.addEventListener('drop', async e => {
+        e.preventDefault()
+        const target = e.target.closest('.inv-row')
+        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over', 'inv-row--dragging'))
+        if (!target || !dragSrc || target === dragSrc) return
+
+        // Reorder in DOM
+        const rows = [...list.querySelectorAll('.inv-row')]
+        const srcIdx = rows.indexOf(dragSrc)
+        const tgtIdx = rows.indexOf(target)
+        if (srcIdx < tgtIdx) target.after(dragSrc)
+        else target.before(dragSrc)
+
+        // Persist new order
+        const order = [...list.querySelectorAll('.inv-row')].map(r => r.dataset.id)
+        api('PATCH', '/inventories/reorder', { order }).catch(() => {})
+      })
+
+      list.addEventListener('dragend', () => {
+        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--dragging', 'inv-row--drag-over'))
+        dragSrc = null
+      })
+    }
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }

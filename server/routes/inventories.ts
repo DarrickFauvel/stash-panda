@@ -14,16 +14,36 @@ router.use('/:inventoryId/items', itemsRouter)
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT i.id, i.name, i.owner_id, im.role, i.created_at,
+      sql: `SELECT i.id, i.name, i.owner_id, im.role, im.position, i.created_at,
                    (SELECT COUNT(*) FROM items WHERE inventory_id = i.id) AS item_count
             FROM inventories i
             JOIN inventory_members im ON im.inventory_id = i.id AND im.user_id = ?
-            ORDER BY i.name ASC`,
+            ORDER BY im.position ASC, i.name ASC`,
       args: [req.user!.id],
     })
     res.json({ inventories: result.rows })
   } catch (err) {
     console.error('list inventories:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// PATCH /api/inventories/reorder
+router.patch('/reorder', requireAuth, async (req, res) => {
+  const { order } = req.body
+  if (!Array.isArray(order) || order.some(id => typeof id !== 'string')) {
+    return res.status(400).json({ error: 'order must be an array of inventory IDs' })
+  }
+  try {
+    await db.batch(
+      order.map((id, position) => ({
+        sql: 'UPDATE inventory_members SET position = ? WHERE inventory_id = ? AND user_id = ?',
+        args: [position, id, req.user!.id],
+      }))
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('reorder inventories:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })

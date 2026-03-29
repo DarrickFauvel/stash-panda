@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS inventory_members (
   inventory_id TEXT NOT NULL REFERENCES inventories(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK(role IN ('owner', 'editor', 'viewer')),
+  position INTEGER NOT NULL DEFAULT 0,
   joined_at INTEGER NOT NULL DEFAULT (unixepoch()),
   PRIMARY KEY (inventory_id, user_id)
 );
@@ -117,5 +118,10 @@ const statements = schema
 for (const sql of statements) {
   await db.execute(sql)
 }
+
+// Additive column migrations (safe to re-run)
+try {
+  await db.execute('ALTER TABLE inventory_members ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
+} catch { /* column already exists */ }
 
 console.log('✅ Migration complete')

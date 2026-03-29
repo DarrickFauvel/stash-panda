@@ -715,6 +715,51 @@ quantity-stepper input[type="number"] {
   }
 }
 
+/* ── Inventory drag-to-reorder ──────────────────────────────────── */
+
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.inv-row__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.drag-handle {
+  flex-shrink: 0;
+  width: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-subtle);
+  cursor: grab;
+  font-size: 1.1rem;
+  letter-spacing: -1px;
+  touch-action: none;
+}
+
+.drag-handle:active { cursor: grabbing; }
+
+.inv-row--dragging {
+  opacity: 0.4;
+}
+
+.inv-row--drag-over {
+  outline: 2px solid var(--c-brand);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
 /* ── Photo gallery ──────────────────────────────────────────────── */
 
 .photo-gallery {
