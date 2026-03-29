@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.ts'
 import inventoryRoutes from './routes/inventories.ts'
 import inviteRoutes from './routes/invite.ts'
 import eventsRoutes from './routes/events.ts'
+import bggRoutes from './routes/bgg.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
@@ -28,6 +29,7 @@ app.use('/uploads', express.static(process.env.UPLOAD_DIR ?? join(root, 'uploads
 app.use('/api/auth', authRoutes)
 app.use('/api/inventories', inventoryRoutes)
 app.use('/api/invite', inviteRoutes)
+app.use('/api/bgg', bggRoutes)
 app.use('/events', eventsRoutes)
 
 // SPA fallback — serves app shell for all non-API routes

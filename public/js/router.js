@@ -876,6 +876,27 @@ async function routeItemNew(matches) {
         <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
         <h1 class="page-title mt-4">Add Item</h1>
       </div>
+
+      <!-- BGG Lookup -->
+      <div class="card mb-4" id="bgg-card">
+        <div class="card-header">
+          <h2 class="font-semi">🎲 Board Game Lookup</h2>
+          <button class="btn btn-ghost btn-sm" id="bgg-toggle">Search BGG</button>
+        </div>
+        <div id="bgg-panel" hidden>
+          <div class="card-body" style="padding-bottom:0">
+            <div class="field" style="margin-bottom:var(--space-2)">
+              <div style="display:flex;gap:var(--space-2)">
+                <input type="text" id="bgg-query" placeholder="Game title…" autocomplete="off" style="flex:1">
+                <button class="btn btn-secondary btn-sm" id="bgg-search-btn" type="button">Search</button>
+              </div>
+            </div>
+            <div id="bgg-status" class="text-sm text-muted mb-2" hidden></div>
+          </div>
+          <div id="bgg-results" hidden></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-body">
           <div id="form-error" role="alert"></div>
@@ -929,12 +950,126 @@ async function routeItemNew(matches) {
     </div>
   `)
 
+  // ── BGG lookup ────────────────────────────────────────────────────────────
+  const bggPanel = document.getElementById('bgg-panel')
+  const bggToggle = document.getElementById('bgg-toggle')
+  const bggQuery = document.getElementById('bgg-query')
+  const bggStatus = document.getElementById('bgg-status')
+  const bggResults = document.getElementById('bgg-results')
+
+  bggToggle.addEventListener('click', () => {
+    bggPanel.hidden = !bggPanel.hidden
+    if (!bggPanel.hidden) bggQuery.focus()
+  })
+
+  async function bggSearch() {
+    const q = bggQuery.value.trim()
+    if (!q) return
+    bggStatus.textContent = 'Searching BoardGameGeek…'
+    bggStatus.hidden = false
+    bggResults.hidden = true
+    bggResults.innerHTML = ''
+    try {
+      const data = await api('GET', `/bgg/search?q=${encodeURIComponent(q)}`)
+      if (!data?.results?.length) {
+        bggStatus.textContent = 'No results found.'
+        return
+      }
+      bggStatus.hidden = true
+      bggResults.innerHTML = data.results.map(r => `
+        <button type="button" class="bgg-result" data-id="${r.id}">
+          <span class="bgg-result__name">${escapeHTML(r.name)}</span>
+          ${r.year ? `<span class="bgg-result__year">${r.year}</span>` : ''}
+        </button>
+      `).join('')
+      bggResults.hidden = false
+
+      bggResults.querySelectorAll('.bgg-result').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          bggResults.querySelectorAll('.bgg-result').forEach(b => b.classList.remove('bgg-result--active'))
+          btn.classList.add('bgg-result--active')
+          bggStatus.textContent = 'Loading details…'
+          bggStatus.hidden = false
+          try {
+            const det = await api('GET', `/bgg/thing/${btn.dataset.id}`)
+            if (!det?.thing) return
+            const t = det.thing
+            // Pre-fill form
+            document.getElementById('item-name').value = t.name ?? ''
+            document.getElementById('item-desc').value = t.description ?? ''
+            // Store BGG data in custom_fields via hidden input
+            const existing = document.getElementById('bgg-custom-fields')
+            const inp = existing ?? document.createElement('input')
+            inp.type = 'hidden'
+            inp.id = 'bgg-custom-fields'
+            inp.name = '__bgg'
+            if (!existing) document.getElementById('new-item-form').appendChild(inp)
+            inp.value = JSON.stringify({
+              bgg_id: t.id,
+              year_published: t.year,
+              min_players: t.minPlayers,
+              max_players: t.maxPlayers,
+              playing_time_min: t.playingTime,
+              min_age: t.minAge,
+            })
+
+            // Show a thumbnail preview if available
+            if (t.thumbnail) {
+              const prev = document.getElementById('bgg-thumb')
+              if (!prev) {
+                const img = document.createElement('img')
+                img.id = 'bgg-thumb'
+                img.src = t.thumbnail
+                img.alt = t.name ?? ''
+                img.className = 'bgg-thumb'
+                document.getElementById('bgg-panel').querySelector('.card-body').appendChild(img)
+              } else {
+                prev.src = t.thumbnail
+              }
+            }
+
+            const summary = [
+              t.year ? `Published ${t.year}` : null,
+              t.minPlayers && t.maxPlayers ? `${t.minPlayers}–${t.maxPlayers} players` : null,
+              t.playingTime ? `~${t.playingTime} min` : null,
+              t.minAge ? `Ages ${t.minAge}+` : null,
+            ].filter(Boolean).join(' · ')
+            bggStatus.textContent = summary || 'Details loaded.'
+            bggStatus.hidden = false
+
+            // Scroll to form
+            document.getElementById('item-name').scrollIntoView({ behavior: 'smooth', block: 'center' })
+            document.getElementById('item-name').focus()
+          } catch (err) {
+            bggStatus.textContent = 'Failed to load details.'
+          }
+        })
+      })
+    } catch (err) {
+      bggStatus.textContent = 'Search failed.'
+    }
+  }
+
+  document.getElementById('bgg-search-btn').addEventListener('click', bggSearch)
+  bggQuery.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); bggSearch() } })
+
+  // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('new-item-form').addEventListener('submit', async e => {
     e.preventDefault()
     const btn = e.target.querySelector('[type=submit]')
     const errEl = document.getElementById('form-error')
     errEl.innerHTML = ''
     btn.disabled = true
+
+    // Merge BGG custom fields if present
+    let customFields = {}
+    const bggRaw = document.getElementById('bgg-custom-fields')?.value
+    if (bggRaw) {
+      try { customFields = JSON.parse(bggRaw) } catch {}
+      // Remove null/undefined values
+      customFields = Object.fromEntries(Object.entries(customFields).filter(([, v]) => v != null))
+    }
+
     try {
       const data = await api('POST', `/inventories/${inventoryId}/items`, {
         name: e.target.name.value,
@@ -944,6 +1079,7 @@ async function routeItemNew(matches) {
         category_id: e.target.category_id?.value || undefined,
         item_type: e.target.item_type.value,
         description: e.target.description.value || undefined,
+        custom_fields: Object.keys(customFields).length ? customFields : undefined,
       })
       if (data) navigate(`/inventories/${inventoryId}/items/${data.item.id}`)
     } catch (err) {
@@ -1033,7 +1169,28 @@ async function routeItem(matches) {
           </div>
         </div>
 
-        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm">${escapeHTML(item.description)}</div></div>` : ''}
+        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm" style="white-space:pre-wrap">${escapeHTML(item.description)}</div></div>` : ''}
+
+        ${(() => {
+          let cf = {}
+          try { cf = JSON.parse(item.custom_fields ?? '{}') } catch {}
+          const bggFields = [
+            cf.year_published ? ['Published', cf.year_published] : null,
+            cf.min_players != null && cf.max_players != null ? ['Players', `${cf.min_players}–${cf.max_players}`] : null,
+            cf.playing_time_min ? ['Playing time', `~${cf.playing_time_min} min`] : null,
+            cf.min_age ? ['Min age', `${cf.min_age}+`] : null,
+          ].filter(Boolean)
+          if (!bggFields.length) return ''
+          return `
+          <div class="card mb-4">
+            <div class="card-header"><h2 class="section-title" style="margin:0">🎲 Board Game Info</h2></div>
+            <div class="card-body">
+              <dl class="bgg-info-grid">
+                ${bggFields.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}
+              </dl>
+            </div>
+          </div>`
+        })()}
 
         <div class="card">
           <div class="card-header">
