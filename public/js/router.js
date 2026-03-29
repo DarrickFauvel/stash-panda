@@ -240,7 +240,7 @@ async function routeInventories() {
       : `<div class="item-list">
            ${inventories.map(inv => `
              <a href="/inventories/${inv.id}" data-link class="item-row">
-               <div class="item-row__photo item-row__photo--placeholder">📦</div>
+               <div class="item-row__photo item-row__photo--placeholder">${inventoryIcon(inv.name)}</div>
                <div class="item-row__info">
                  <div class="item-row__name">${escapeHTML(inv.name)}</div>
                  <div class="item-row__meta">${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
@@ -935,6 +935,41 @@ document.addEventListener('click', e => {
 window.addEventListener('popstate', () => render(location.pathname))
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
+
+function inventoryIcon(name) {
+  const n = name.toLowerCase()
+  const rules = [
+    [/\b(home|house|flat|apartment|condo|residence|cottage|cabin|hut)\b/, '🏠'],
+    [/\b(car|auto|vehicle|truck|van|suv|jeep|pickup|motorhome|rv)\b/, '🚗'],
+    [/\b(bike|bicycle|cycle|cycling)\b/, '🚲'],
+    [/\b(motorbike|motorcycle|moped|scooter)\b/, '🏍️'],
+    [/\b(boat|yacht|sailboat|canoe|kayak|vessel)\b/, '⛵'],
+    [/\b(garage|workshop|shop|shed|studio)\b/, '🔧'],
+    [/\b(kitchen|pantry|fridge|food|grocery|spice|cooking)\b/, '🍳'],
+    [/\b(office|work|desk|computer|tech|electronics|equipment)\b/, '💼'],
+    [/\b(clothes|clothing|wardrobe|closet|fashion|apparel)\b/, '👗'],
+    [/\b(tools|hardware|toolbox)\b/, '🔨'],
+    [/\b(garden|yard|outdoor|plant|greenhouse|nursery)\b/, '🌱'],
+    [/\b(sport|gym|fitness|exercise|training|gear)\b/, '🏋️'],
+    [/\b(books|library|reading|shelf)\b/, '📚'],
+    [/\b(art|craft|hobby|creative|studio)\b/, '🎨'],
+    [/\b(music|instrument|studio|band)\b/, '🎵'],
+    [/\b(travel|luggage|bag|suitcase|adventure)\b/, '🧳'],
+    [/\b(medical|pharmacy|medicine|health|first.?aid)\b/, '💊'],
+    [/\b(pet|dog|cat|animal|vet)\b/, '🐾'],
+    [/\b(baby|nursery|kids|children|toy)\b/, '🧸'],
+    [/\b(camera|photo|photography)\b/, '📷'],
+    [/\b(game|gaming|console|video.?game)\b/, '🎮'],
+    [/\b(wine|bar|cellar|drinks|spirits|beer|liquor)\b/, '🍷'],
+    [/\b(warehouse|storage|stock|inventory|supply|supplies)\b/, '🏭'],
+    [/\b(office supplies|stationery|paper)\b/, '📎'],
+    [/\b(holiday|christmas|seasonal|decoration)\b/, '🎄'],
+  ]
+  for (const [pattern, icon] of rules) {
+    if (pattern.test(n)) return icon
+  }
+  return '📦'
+}
 
 function escapeHTML(str) {
   return String(str ?? '')
