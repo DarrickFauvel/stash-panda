@@ -311,7 +311,12 @@ router.get('/:id/locations', requireAuth, async (req, res) => {
     if (!access.rows[0]) return res.status(403).json({ error: 'Access denied' })
 
     const result = await db.execute({
-      sql: 'SELECT * FROM locations WHERE inventory_id = ? ORDER BY name ASC',
+      sql: `SELECT l.*, COUNT(i.id) AS item_count
+            FROM locations l
+            LEFT JOIN items i ON i.location_id = l.id
+            WHERE l.inventory_id = ?
+            GROUP BY l.id
+            ORDER BY l.name ASC`,
       args: [id],
     })
     res.json({ locations: result.rows })

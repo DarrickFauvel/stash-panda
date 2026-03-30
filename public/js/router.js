@@ -54,6 +54,20 @@ function setHTML(html) {
   document.getElementById('app').innerHTML = html
 }
 
+// crumbs: [{label, href?}, ...] — last item is current page (no href)
+function setBreadcrumb(crumbs) {
+  const bar = document.getElementById('breadcrumb-bar')
+  if (!crumbs.length) { bar.hidden = true; bar.innerHTML = ''; return }
+  bar.hidden = false
+  bar.innerHTML = crumbs.map((c, i) => {
+    const isLast = i === crumbs.length - 1
+    return isLast
+      ? `<span class="breadcrumb__item breadcrumb__item--current">${escapeHTML(c.label)}</span>`
+      : `<a href="${c.href}" data-link class="breadcrumb__item">${escapeHTML(c.label)}</a>
+         <span class="breadcrumb__sep" aria-hidden="true">›</span>`
+  }).join('')
+}
+
 function setNav(isLoggedIn) {
   document.getElementById('bottom-nav').hidden = !isLoggedIn
 
@@ -89,6 +103,8 @@ const routes = [
   { pattern: /^\/inventories$/, handler: routeInventories },
   { pattern: /^\/inventories\/new$/, handler: routeInventoryNew },
   { pattern: /^\/inventories\/([^/]+)$/, handler: routeInventory },
+  { pattern: /^\/inventories\/([^/]+)\/locations$/, handler: routeLocations },
+  { pattern: /^\/inventories\/([^/]+)\/locations\/([^/]+)$/, handler: routeLocation },
   { pattern: /^\/inventories\/([^/]+)\/items$/, handler: routeItems },
   { pattern: /^\/inventories\/([^/]+)\/items\/new$/, handler: routeItemNew },
   { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)\/edit$/, handler: routeItemEdit },
@@ -104,6 +120,7 @@ function routeHome() {
 
 function routeLogin() {
   if (auth.isLoggedIn) return navigate('/inventories')
+  setBreadcrumb([])
   const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
   setHTML(`
     <div class="auth-page">
@@ -160,6 +177,7 @@ function routeLogin() {
 
 function routeSignup() {
   if (auth.isLoggedIn) return navigate('/inventories')
+  setBreadcrumb([])
   const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
   setHTML(`
     <div class="auth-page">
@@ -222,6 +240,7 @@ function routeSignup() {
 
 async function routeInventories() {
   if (!auth.isLoggedIn) return navigate('/login')
+  setBreadcrumb([])
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
@@ -321,11 +340,14 @@ async function routeInventories() {
 
 function routeInventoryNew() {
   if (!auth.isLoggedIn) return navigate('/login')
+  setBreadcrumb([
+    { label: 'Inventories', href: '/inventories' },
+    { label: 'New Inventory' },
+  ])
   setHTML(`
     <div>
       <div class="page-header">
-        <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Back</a>
-        <h1 class="page-title mt-4">New Inventory</h1>
+        <h1 class="page-title">New Inventory</h1>
       </div>
       <div class="card">
         <div class="card-body">
@@ -382,6 +404,11 @@ async function routeInventory(matches) {
     const isOwner = inventory.role === 'owner'
     const canEdit = inventory.role === 'owner' || inventory.role === 'editor'
 
+    setBreadcrumb([
+      { label: 'Inventories', href: '/inventories' },
+      { label: inventory.name },
+    ])
+
     const roleBadgeClass = { owner: 'badge-green', editor: 'badge-orange', viewer: 'badge-gray' }
     const roleLabel = { owner: 'Owner', editor: 'Editor', viewer: 'Viewer' }
 
@@ -405,8 +432,7 @@ async function routeInventory(matches) {
     setHTML(`
       <div>
         <div class="page-header">
-          <a href="/inventories" data-link class="btn btn-ghost btn-sm">← Inventories</a>
-          <div class="page-header-row mt-4">
+          <div class="page-header-row">
             <div>
               <h1 class="page-title">${escapeHTML(inventory.name)}</h1>
               <p class="page-subtitle">
@@ -418,9 +444,14 @@ async function routeInventory(matches) {
           </div>
         </div>
 
-        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary btn-full mb-6">
-          Browse items →
-        </a>
+        <div style="display:flex;gap:var(--space-3);margin-bottom:var(--space-6)">
+          <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary" style="flex:1">
+            Browse items →
+          </a>
+          <a href="/inventories/${inventoryId}/locations" data-link class="btn btn-secondary" style="flex:1">
+            Locations →
+          </a>
+        </div>
 
         <!-- Locations & Categories -->
         ${canEdit ? `
@@ -793,20 +824,213 @@ async function routeInventory(matches) {
   }
 }
 
-async function routeItems(matches) {
+async function routeLocations(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
   const inventoryId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
+    const [invData, locData] = await Promise.all([
+      api('GET', `/inventories/${inventoryId}`),
+      api('GET', `/inventories/${inventoryId}/locations`),
+    ])
+    if (!invData || !locData) return
+    const locations = locData.locations ?? []
+    const invName = invData.inventory.name
+
+    setBreadcrumb([
+      { label: 'Inventories', href: '/inventories' },
+      { label: invName, href: `/inventories/${inventoryId}` },
+      { label: 'Locations' },
+    ])
+
+    // Build a tree structure
+    function buildTree(nodes, parentId = null) {
+      return nodes
+        .filter(n => (n.parent_id ?? null) === parentId)
+        .map(n => ({ ...n, children: buildTree(nodes, n.id) }))
+    }
+
+    // Sum item_count recursively (includes items in child locations)
+    function totalCount(node) {
+      return Number(node.item_count ?? 0) + node.children.reduce((s, c) => s + totalCount(c), 0)
+    }
+
+    function renderTree(nodes, depth = 0) {
+      if (!nodes.length) return ''
+      return nodes.map(node => {
+        const total = totalCount(node)
+        const indent = depth * 1.25
+        return `
+          <a href="/inventories/${inventoryId}/locations/${node.id}" data-link
+             class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
+            <span class="location-row__name">${escapeHTML(node.name)}</span>
+            <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
+          </a>
+          ${renderTree(node.children, depth + 1)}
+        `
+      }).join('')
+    }
+
+    const tree = buildTree(locations)
+    const isEmpty = locations.length === 0
+
+    setHTML(`
+      <div>
+        <div class="page-header">
+          <h1 class="page-title">Locations</h1>
+        </div>
+
+        ${isEmpty
+          ? `<div class="empty-state">
+               <div class="empty-state__icon">📍</div>
+               <div class="empty-state__title">No locations yet</div>
+               <div class="empty-state__body">Add locations in the inventory settings.</div>
+               <a href="/inventories/${inventoryId}" data-link class="btn btn-primary">Go to settings</a>
+             </div>`
+          : `<div class="card">
+               <div class="location-tree">
+                 ${renderTree(tree)}
+               </div>
+             </div>`
+        }
+      </div>
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+async function routeLocation(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const [, inventoryId, locationId] = matches
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  try {
+    const [locData, itemsData] = await Promise.all([
+      api('GET', `/inventories/${inventoryId}/locations`),
+      api('GET', `/inventories/${inventoryId}/items?location=${locationId}`),
+    ])
+    if (!locData) return
+
+    const allLocs = locData.locations ?? []
+    const current = allLocs.find(l => l.id === locationId)
+    if (!current) return navigate(`/inventories/${inventoryId}/locations`)
+
+    const children = allLocs.filter(l => l.parent_id === locationId)
+    const parent = allLocs.find(l => l.id === current.parent_id)
+    const items = itemsData?.items ?? []
+    const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
+
+    // Count items for each child (direct only shown in badge, totals would need recursion)
+    function childCount(locId) {
+      return Number(allLocs.find(l => l.id === locId)?.item_count ?? 0)
+    }
+
+    const sublocsHTML = children.length ? `
+      <div class="card mb-4">
+        <div class="card-header"><h2 class="section-title" style="margin:0">Sub-locations</h2></div>
+        <div class="location-tree">
+          ${children.map(c => `
+            <a href="/inventories/${inventoryId}/locations/${c.id}" data-link class="location-row">
+              <span class="location-row__name">${escapeHTML(c.name)}</span>
+              <span class="location-row__count">${childCount(c.id)} item${childCount(c.id) !== 1 ? 's' : ''}</span>
+            </a>
+          `).join('')}
+        </div>
+      </div>` : ''
+
+    const itemsHTML = items.length ? `
+      <div class="card">
+        <div class="card-header"><h2 class="section-title" style="margin:0">Items here</h2></div>
+        <div class="item-list" style="padding:var(--space-2)">
+          ${items.map(item => `
+            <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row">
+              ${item.photo_url
+                ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
+                : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`}
+              <div class="item-row__info">
+                <div class="item-row__name">${escapeHTML(item.name)}</div>
+                <div class="item-row__meta">${escapeHTML(item.category_name ?? item.item_type)}</div>
+              </div>
+              <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
+            </a>
+          `).join('')}
+        </div>
+      </div>` : ''
+
+    const emptyHTML = !children.length && !items.length ? `
+      <div class="empty-state">
+        <div class="empty-state__icon">📭</div>
+        <div class="empty-state__title">Nothing here yet</div>
+        <div class="empty-state__body">Add items and assign them to this location.</div>
+      </div>` : ''
+
+    // Build ancestor chain + breadcrumb
+    const ancestors = []
+    let node = current
+    while (node.parent_id) {
+      node = allLocs.find(l => l.id === node.parent_id)
+      if (node) ancestors.unshift(node)
+    }
+
+    // Need inventory name — fetch it
+    const invData = await api('GET', `/inventories/${inventoryId}`)
+    const invName = invData?.inventory?.name ?? ''
+
+    setBreadcrumb([
+      { label: 'Inventories', href: '/inventories' },
+      { label: invName, href: `/inventories/${inventoryId}` },
+      { label: 'Locations', href: `/inventories/${inventoryId}/locations` },
+      ...ancestors.map(a => ({ label: a.name, href: `/inventories/${inventoryId}/locations/${a.id}` })),
+      { label: current.name },
+    ])
+
+    setHTML(`
+      <div>
+        <div class="page-header">
+          <h1 class="page-title">${escapeHTML(current.name)}</h1>
+        </div>
+        ${sublocsHTML}
+        ${itemsHTML}
+        ${emptyHTML}
+      </div>
+    `)
+  } catch (err) {
+    setHTML(`<div class="alert alert-error">${err.message}</div>`)
+  }
+}
+
+async function routeItems(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const inventoryId = matches[1]
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  const qs = location.search  // preserve ?location=, ?category=, etc.
+
+  try {
     const [invData, itemsData] = await Promise.all([
       api('GET', `/inventories/${inventoryId}`),
-      api('GET', `/inventories/${inventoryId}/items`),
+      api('GET', `/inventories/${inventoryId}/items${qs}`),
     ])
     if (!invData || !itemsData) return
 
     const { inventory } = invData
     const { items } = itemsData
+    const locationFilter = new URLSearchParams(qs).get('location')
+    const filterLocName = locationFilter ? items[0]?.location_name : null
+
+    setBreadcrumb([
+      { label: 'Inventories', href: '/inventories' },
+      { label: inventory.name, href: `/inventories/${inventoryId}` },
+      ...(locationFilter ? [
+        { label: 'Locations', href: `/inventories/${inventoryId}/locations` },
+        { label: filterLocName ?? 'Location', href: `/inventories/${inventoryId}/locations/${locationFilter}` },
+        { label: 'Items' },
+      ] : [
+        { label: 'Items' },
+      ]),
+    ])
 
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
 
@@ -836,10 +1060,7 @@ async function routeItems(matches) {
     setHTML(`
       <div>
         <div class="page-header page-header-row">
-          <div>
-            <a href="/inventories/${inventoryId}" data-link class="btn btn-ghost btn-sm">← ${escapeHTML(inventory.name)}</a>
-            <h1 class="page-title mt-4">Items</h1>
-          </div>
+          <h1 class="page-title">Items</h1>
           <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
         </div>
         ${listHTML}
@@ -855,12 +1076,20 @@ async function routeItemNew(matches) {
   const inventoryId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
-  const [locData, catData] = await Promise.all([
+  const [invData, locData, catData] = await Promise.all([
+    api('GET', `/inventories/${inventoryId}`),
     api('GET', `/inventories/${inventoryId}/locations`),
     api('GET', `/inventories/${inventoryId}/categories`),
   ])
   const locations = locData?.locations ?? []
   const categories = catData?.categories ?? []
+
+  setBreadcrumb([
+    { label: 'Inventories', href: '/inventories' },
+    { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
+    { label: 'Items', href: `/inventories/${inventoryId}/items` },
+    { label: 'Add Item' },
+  ])
 
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
@@ -877,8 +1106,7 @@ async function routeItemNew(matches) {
   setHTML(`
     <div>
       <div class="page-header">
-        <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
-        <h1 class="page-title mt-4">Add Item</h1>
+        <h1 class="page-title">Add Item</h1>
       </div>
 
       <div class="card">
@@ -923,6 +1151,11 @@ async function routeItemNew(matches) {
             </div>
 
             <div id="boardgame-fields" hidden>
+              <div class="field">
+                <label for="bg-url">BGG URL</label>
+                <input type="url" id="bg-url" name="bg_url" placeholder="https://boardgamegeek.com/boardgame/13/catan">
+                <span id="bg-id-display" class="text-xs text-muted" hidden></span>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                 <div class="field">
                   <label for="bg-year">Year published</label>
@@ -996,10 +1229,17 @@ async function routeItemNew(matches) {
     </div>
   `)
 
-  // ── Board game fields toggle ──────────────────────────────────────────────
+  // ── Board game fields toggle + BGG URL parsing ───────────────────────────
   const bgFields = document.getElementById('boardgame-fields')
   document.getElementById('item-type').addEventListener('change', e => {
     bgFields.hidden = e.target.value !== 'boardgame'
+  })
+
+  document.getElementById('bg-url').addEventListener('input', e => {
+    const id = parseBggId(e.target.value)
+    const display = document.getElementById('bg-id-display')
+    if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
+    else { display.hidden = true }
   })
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -1019,6 +1259,7 @@ async function routeItemNew(matches) {
       const dimUnit = str('bg_dim_unit')
       const weight = num('bg_weight'), weightUnit = str('bg_weight_unit')
       customFields = Object.fromEntries(Object.entries({
+        bgg_id:         parseBggId(e.target.bg_url?.value ?? '') ?? undefined,
         year_published: num('bg_year'),
         min_players:    num('bg_min_players'),
         max_players:    num('bg_max_players'),
@@ -1056,9 +1297,19 @@ async function routeItem(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const data = await api('GET', `/inventories/${inventoryId}/items/${itemId}`)
+    const [data, invData] = await Promise.all([
+      api('GET', `/inventories/${inventoryId}/items/${itemId}`),
+      api('GET', `/inventories/${inventoryId}`),
+    ])
     if (!data) return
     const { item, photos, logs } = data
+
+    setBreadcrumb([
+      { label: 'Inventories', href: '/inventories' },
+      { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
+      { label: 'Items', href: `/inventories/${inventoryId}/items` },
+      { label: item.name },
+    ])
 
     const logsHTML = logs.length === 0
       ? '<p class="text-sm text-muted">No usage history yet.</p>'
@@ -1104,7 +1355,6 @@ async function routeItem(matches) {
       <div>
         <div class="page-header">
           <div class="flex items-center justify-between">
-            <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
             <div class="flex gap-2">
               <a href="/inventories/${inventoryId}/items/${itemId}/edit" data-link class="btn btn-secondary btn-sm">Edit</a>
               <button class="btn btn-ghost btn-sm" id="btn-delete" style="color:var(--c-danger)">Delete</button>
@@ -1284,13 +1534,22 @@ async function routeItemEdit(matches) {
   const [, inventoryId, itemId] = matches
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
-  const [itemData, locData, catData] = await Promise.all([
+  const [itemData, invData, locData, catData] = await Promise.all([
     api('GET', `/inventories/${inventoryId}/items/${itemId}`),
+    api('GET', `/inventories/${inventoryId}`),
     api('GET', `/inventories/${inventoryId}/locations`),
     api('GET', `/inventories/${inventoryId}/categories`),
   ])
   if (!itemData) return
   const { item } = itemData
+
+  setBreadcrumb([
+    { label: 'Inventories', href: '/inventories' },
+    { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
+    { label: 'Items', href: `/inventories/${inventoryId}/items` },
+    { label: item.name, href: `/inventories/${inventoryId}/items/${itemId}` },
+    { label: 'Edit' },
+  ])
   const locations = locData?.locations ?? []
   const categories = catData?.categories ?? []
 
@@ -1316,8 +1575,7 @@ async function routeItemEdit(matches) {
   setHTML(`
     <div>
       <div class="page-header">
-        <a href="/inventories/${inventoryId}/items/${itemId}" data-link class="btn btn-ghost btn-sm">← Back</a>
-        <h1 class="page-title mt-4">Edit Item</h1>
+        <h1 class="page-title">Edit Item</h1>
       </div>
       <div class="card">
         <div class="card-body">
@@ -1361,6 +1619,11 @@ async function routeItemEdit(matches) {
             </div>
 
             <div id="boardgame-fields" ${isBG ? '' : 'hidden'}>
+              <div class="field">
+                <label for="bg-url">BGG URL</label>
+                <input type="url" id="bg-url" name="bg_url" placeholder="https://boardgamegeek.com/boardgame/13/catan" value="${cf.bgg_id ? `https://boardgamegeek.com/boardgame/${cf.bgg_id}` : ''}">
+                <span id="bg-id-display" class="text-xs text-muted" ${cf.bgg_id ? '' : 'hidden'}>BGG ID: ${cf.bgg_id ?? ''}</span>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                 <div class="field">
                   <label for="bg-year">Year published</label>
@@ -1438,6 +1701,13 @@ async function routeItemEdit(matches) {
     document.getElementById('boardgame-fields').hidden = e.target.value !== 'boardgame'
   })
 
+  document.getElementById('bg-url').addEventListener('input', e => {
+    const id = parseBggId(e.target.value)
+    const display = document.getElementById('bg-id-display')
+    if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
+    else { display.hidden = true }
+  })
+
   document.getElementById('edit-item-form').addEventListener('submit', async e => {
     e.preventDefault()
     const btn = e.target.querySelector('[type=submit]')
@@ -1453,6 +1723,7 @@ async function routeItemEdit(matches) {
       const dimUnit = str('bg_dim_unit')
       const weight = num('bg_weight'), weightUnit = str('bg_weight_unit')
       customFields = Object.fromEntries(Object.entries({
+        bgg_id:           parseBggId(e.target.bg_url?.value ?? '') ?? undefined,
         year_published:   num('bg_year'),
         min_players:      num('bg_min_players'),
         max_players:      num('bg_max_players'),
@@ -1486,6 +1757,7 @@ async function routeItemEdit(matches) {
 
 function routeProfile() {
   if (!auth.isLoggedIn) return navigate('/login')
+  setBreadcrumb([{ label: 'Profile' }])
   const user = auth.user
   setHTML(`
     <div>
@@ -1589,8 +1861,9 @@ export function navigate(path) {
 }
 
 function render(path) {
+  const pathname = path.split('?')[0]
   for (const { pattern, handler } of routes) {
-    const m = path.match(pattern)
+    const m = pathname.match(pattern)
     if (m) {
       setNav(auth.isLoggedIn)
       handler(m)
@@ -1619,7 +1892,7 @@ document.addEventListener('click', e => {
 })
 
 // Browser back/forward
-window.addEventListener('popstate', () => render(location.pathname))
+window.addEventListener('popstate', () => render(location.pathname + location.search))
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -1656,6 +1929,11 @@ function inventoryIcon(name) {
     if (pattern.test(n)) return icon
   }
   return '📦'
+}
+
+function parseBggId(url) {
+  const m = String(url).match(/boardgamegeek\.com\/boardgame\/(\d+)/i)
+  return m ? m[1] : null
 }
 
 function escapeHTML(str) {
