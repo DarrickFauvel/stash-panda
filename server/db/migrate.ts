@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS items (
   barcode TEXT,
   description TEXT,
   item_type TEXT NOT NULL DEFAULT 'physical'
-    CHECK(item_type IN ('physical', 'digital', 'subscription', 'document')),
+    CHECK(item_type IN ('physical', 'digital', 'subscription', 'document', 'boardgame')),
   custom_fields TEXT NOT NULL DEFAULT '{}',
   created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -123,5 +123,46 @@ for (const sql of statements) {
 try {
   await db.execute('ALTER TABLE inventory_members ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
 } catch { /* column already exists */ }
+
+// Add 'boardgame' to items.item_type CHECK constraint (requires table rebuild in SQLite)
+{
+  const r = await db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='items'")
+  const sql = r.rows[0]?.sql as string ?? ''
+  if (!sql.includes('boardgame')) {
+    await db.execute('PRAGMA foreign_keys=OFF')
+    await db.execute(`
+      CREATE TABLE items_new (
+        id TEXT PRIMARY KEY,
+        inventory_id TEXT NOT NULL REFERENCES inventories(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit TEXT,
+        location_id TEXT REFERENCES locations(id) ON DELETE SET NULL,
+        category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
+        value REAL,
+        purchase_date TEXT,
+        expiry_date TEXT,
+        barcode TEXT,
+        description TEXT,
+        item_type TEXT NOT NULL DEFAULT 'physical'
+          CHECK(item_type IN ('physical', 'digital', 'subscription', 'document', 'boardgame')),
+        custom_fields TEXT NOT NULL DEFAULT '{}',
+        created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `)
+    await db.execute('INSERT INTO items_new SELECT * FROM items')
+    await db.execute('DROP TABLE items')
+    await db.execute('ALTER TABLE items_new RENAME TO items')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_inventory ON items(inventory_id)')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_category   ON items(category_id)')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_location   ON items(location_id)')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_items_name       ON items(inventory_id, name)')
+    await db.execute('PRAGMA foreign_keys=ON')
+    console.log('  → items table rebuilt with boardgame item type')
+  }
+}
 
 console.log('✅ Migration complete')

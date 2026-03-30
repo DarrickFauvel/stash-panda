@@ -282,6 +282,34 @@ router.post('/:itemId/photos', requireAuth, upload.single('photo'), async (req, 
   }
 })
 
+// POST /api/inventories/:inventoryId/items/:itemId/photos/url
+router.post('/:itemId/photos/url', requireAuth, async (req, res) => {
+  const { inventoryId, itemId } = req.params as Record<string, string>
+  const role = await getMemberRole(inventoryId, req.user!.id)
+  if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
+
+  const { url } = req.body as { url?: string }
+  if (!url) return res.status(400).json({ error: 'URL required' })
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error()
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' })
+  }
+
+  const id = randomUUID()
+  try {
+    await db.execute({
+      sql: 'INSERT INTO item_photos (id, item_id, url, uploaded_by) VALUES (?, ?, ?, ?)',
+      args: [id, itemId, url, req.user!.id],
+    })
+    res.status(201).json({ photo: { id, item_id: itemId, url } })
+  } catch (err) {
+    console.error('photo url:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // DELETE /api/inventories/:inventoryId/items/:itemId/photos/:photoId
 router.delete('/:itemId/photos/:photoId', requireAuth, async (req, res) => {
   const { inventoryId, itemId, photoId } = req.params as Record<string, string>
@@ -295,9 +323,11 @@ router.delete('/:itemId/photos/:photoId', requireAuth, async (req, res) => {
     })
     if (!result.rows[0]) return res.status(404).json({ error: 'Photo not found' })
 
-    const filename = (result.rows[0].url as string).replace('/uploads/', '')
+    const photoUrl = result.rows[0].url as string
     await db.execute({ sql: 'DELETE FROM item_photos WHERE id = ?', args: [photoId] })
-    await unlink(join(UPLOAD_DIR, filename)).catch(() => {})
+    if (photoUrl.startsWith('/uploads/')) {
+      await unlink(join(UPLOAD_DIR, photoUrl.replace('/uploads/', ''))).catch(() => {})
+    }
     res.status(204).end()
   } catch (err) {
     console.error('delete photo:', err)

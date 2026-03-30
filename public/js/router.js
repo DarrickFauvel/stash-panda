@@ -91,6 +91,7 @@ const routes = [
   { pattern: /^\/inventories\/([^/]+)$/, handler: routeInventory },
   { pattern: /^\/inventories\/([^/]+)\/items$/, handler: routeItems },
   { pattern: /^\/inventories\/([^/]+)\/items\/new$/, handler: routeItemNew },
+  { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)\/edit$/, handler: routeItemEdit },
   { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)$/, handler: routeItem },
   { pattern: /^\/profile$/, handler: routeProfile },
   { pattern: /^\/invite\/([^/]+)$/, handler: routeInvite },
@@ -807,7 +808,7 @@ async function routeItems(matches) {
     const { inventory } = invData
     const { items } = itemsData
 
-    const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄' }
+    const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
 
     const listHTML = items.length === 0
       ? `<div class="empty-state">
@@ -819,7 +820,10 @@ async function routeItems(matches) {
       : `<div class="item-list">
            ${items.map(item => `
              <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
-               <div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>
+               ${item.photo_url
+                 ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
+                 : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
+               }
                <div class="item-row__info">
                  <div class="item-row__name">${escapeHTML(item.name)}</div>
                  <div class="item-row__meta">${escapeHTML(item.category_name ?? item.location_name ?? item.item_type)}</div>
@@ -877,26 +881,6 @@ async function routeItemNew(matches) {
         <h1 class="page-title mt-4">Add Item</h1>
       </div>
 
-      <!-- BGG Lookup -->
-      <div class="card mb-4" id="bgg-card">
-        <div class="card-header">
-          <h2 class="font-semi">🎲 Board Game Lookup</h2>
-          <button class="btn btn-ghost btn-sm" id="bgg-toggle">Search BGG</button>
-        </div>
-        <div id="bgg-panel" hidden>
-          <div class="card-body" style="padding-bottom:0">
-            <div class="field" style="margin-bottom:var(--space-2)">
-              <div style="display:flex;gap:var(--space-2)">
-                <input type="text" id="bgg-query" placeholder="Game title…" autocomplete="off" style="flex:1">
-                <button class="btn btn-secondary btn-sm" id="bgg-search-btn" type="button">Search</button>
-              </div>
-            </div>
-            <div id="bgg-status" class="text-sm text-muted mb-2" hidden></div>
-          </div>
-          <div id="bgg-results" hidden></div>
-        </div>
-      </div>
-
       <div class="card">
         <div class="card-body">
           <div id="form-error" role="alert"></div>
@@ -931,11 +915,73 @@ async function routeItemNew(matches) {
               <label for="item-type">Type</label>
               <select id="item-type" name="item_type">
                 <option value="physical">Physical</option>
+                <option value="boardgame">🎲 Board Game</option>
                 <option value="digital">Digital</option>
                 <option value="subscription">Subscription</option>
                 <option value="document">Document</option>
               </select>
             </div>
+
+            <div id="boardgame-fields" hidden>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-year">Year published</label>
+                  <input type="number" id="bg-year" name="bg_year" min="1900" max="2100" placeholder="e.g. 2021">
+                </div>
+                <div class="field">
+                  <label for="bg-age">Min age</label>
+                  <input type="number" id="bg-age" name="bg_min_age" min="0" max="99" placeholder="e.g. 10">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-min-players">Min players</label>
+                  <input type="number" id="bg-min-players" name="bg_min_players" min="1" placeholder="1">
+                </div>
+                <div class="field">
+                  <label for="bg-max-players">Max players</label>
+                  <input type="number" id="bg-max-players" name="bg_max_players" min="1" placeholder="4">
+                </div>
+                <div class="field">
+                  <label for="bg-time">Play time (min)</label>
+                  <input type="number" id="bg-time" name="bg_playing_time" min="1" placeholder="60">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-publisher">Publisher</label>
+                  <input type="text" id="bg-publisher" name="bg_publisher" placeholder="e.g. Stonemaier Games">
+                </div>
+                <div class="field">
+                  <label for="bg-designer">Designer</label>
+                  <input type="text" id="bg-designer" name="bg_designer" placeholder="e.g. Jamey Stegmaier">
+                </div>
+              </div>
+              <div class="field">
+                <label>Box dimensions</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:var(--space-2);align-items:center">
+                  <input type="number" id="bg-dim-l" name="bg_dim_l" min="0" step="any" placeholder="L">
+                  <input type="number" id="bg-dim-w" name="bg_dim_w" min="0" step="any" placeholder="W">
+                  <input type="number" id="bg-dim-h" name="bg_dim_h" min="0" step="any" placeholder="H">
+                  <select id="bg-dim-unit" name="bg_dim_unit" style="width:5rem">
+                    <option value="cm">cm</option>
+                    <option value="in">in</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="bg-weight">Weight</label>
+                <div style="display:grid;grid-template-columns:1fr auto;gap:var(--space-2);align-items:center">
+                  <input type="number" id="bg-weight" name="bg_weight" min="0" step="any" placeholder="0.0">
+                  <select id="bg-weight-unit" name="bg_weight_unit" style="width:5rem">
+                    <option value="kg">kg</option>
+                    <option value="lb">lb</option>
+                    <option value="g">g</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <div class="field">
               <label for="item-desc">Description</label>
               <textarea id="item-desc" name="description" rows="2"></textarea>
@@ -950,108 +996,11 @@ async function routeItemNew(matches) {
     </div>
   `)
 
-  // ── BGG lookup ────────────────────────────────────────────────────────────
-  const bggPanel = document.getElementById('bgg-panel')
-  const bggToggle = document.getElementById('bgg-toggle')
-  const bggQuery = document.getElementById('bgg-query')
-  const bggStatus = document.getElementById('bgg-status')
-  const bggResults = document.getElementById('bgg-results')
-
-  bggToggle.addEventListener('click', () => {
-    bggPanel.hidden = !bggPanel.hidden
-    if (!bggPanel.hidden) bggQuery.focus()
+  // ── Board game fields toggle ──────────────────────────────────────────────
+  const bgFields = document.getElementById('boardgame-fields')
+  document.getElementById('item-type').addEventListener('change', e => {
+    bgFields.hidden = e.target.value !== 'boardgame'
   })
-
-  async function bggSearch() {
-    const q = bggQuery.value.trim()
-    if (!q) return
-    bggStatus.textContent = 'Searching BoardGameGeek…'
-    bggStatus.hidden = false
-    bggResults.hidden = true
-    bggResults.innerHTML = ''
-    try {
-      const data = await api('GET', `/bgg/search?q=${encodeURIComponent(q)}`)
-      if (!data?.results?.length) {
-        bggStatus.textContent = 'No results found.'
-        return
-      }
-      bggStatus.hidden = true
-      bggResults.innerHTML = data.results.map(r => `
-        <button type="button" class="bgg-result" data-id="${r.id}">
-          <span class="bgg-result__name">${escapeHTML(r.name)}</span>
-          ${r.year ? `<span class="bgg-result__year">${r.year}</span>` : ''}
-        </button>
-      `).join('')
-      bggResults.hidden = false
-
-      bggResults.querySelectorAll('.bgg-result').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          bggResults.querySelectorAll('.bgg-result').forEach(b => b.classList.remove('bgg-result--active'))
-          btn.classList.add('bgg-result--active')
-          bggStatus.textContent = 'Loading details…'
-          bggStatus.hidden = false
-          try {
-            const det = await api('GET', `/bgg/thing/${btn.dataset.id}`)
-            if (!det?.thing) return
-            const t = det.thing
-            // Pre-fill form
-            document.getElementById('item-name').value = t.name ?? ''
-            document.getElementById('item-desc').value = t.description ?? ''
-            // Store BGG data in custom_fields via hidden input
-            const existing = document.getElementById('bgg-custom-fields')
-            const inp = existing ?? document.createElement('input')
-            inp.type = 'hidden'
-            inp.id = 'bgg-custom-fields'
-            inp.name = '__bgg'
-            if (!existing) document.getElementById('new-item-form').appendChild(inp)
-            inp.value = JSON.stringify({
-              bgg_id: t.id,
-              year_published: t.year,
-              min_players: t.minPlayers,
-              max_players: t.maxPlayers,
-              playing_time_min: t.playingTime,
-              min_age: t.minAge,
-            })
-
-            // Show a thumbnail preview if available
-            if (t.thumbnail) {
-              const prev = document.getElementById('bgg-thumb')
-              if (!prev) {
-                const img = document.createElement('img')
-                img.id = 'bgg-thumb'
-                img.src = t.thumbnail
-                img.alt = t.name ?? ''
-                img.className = 'bgg-thumb'
-                document.getElementById('bgg-panel').querySelector('.card-body').appendChild(img)
-              } else {
-                prev.src = t.thumbnail
-              }
-            }
-
-            const summary = [
-              t.year ? `Published ${t.year}` : null,
-              t.minPlayers && t.maxPlayers ? `${t.minPlayers}–${t.maxPlayers} players` : null,
-              t.playingTime ? `~${t.playingTime} min` : null,
-              t.minAge ? `Ages ${t.minAge}+` : null,
-            ].filter(Boolean).join(' · ')
-            bggStatus.textContent = summary || 'Details loaded.'
-            bggStatus.hidden = false
-
-            // Scroll to form
-            document.getElementById('item-name').scrollIntoView({ behavior: 'smooth', block: 'center' })
-            document.getElementById('item-name').focus()
-          } catch (err) {
-            bggStatus.textContent = 'Failed to load details.'
-          }
-        })
-      })
-    } catch (err) {
-      bggStatus.textContent = err.message?.includes('credentials') ? err.message : 'Search failed.'
-    }
-  }
-
-  document.getElementById('bgg-search-btn').addEventListener('click', bggSearch)
-  bggQuery.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); bggSearch() } })
 
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('new-item-form').addEventListener('submit', async e => {
@@ -1061,13 +1010,25 @@ async function routeItemNew(matches) {
     errEl.innerHTML = ''
     btn.disabled = true
 
-    // Merge BGG custom fields if present
+    // Collect board game custom fields if type is boardgame
     let customFields = {}
-    const bggRaw = document.getElementById('bgg-custom-fields')?.value
-    if (bggRaw) {
-      try { customFields = JSON.parse(bggRaw) } catch {}
-      // Remove null/undefined values
-      customFields = Object.fromEntries(Object.entries(customFields).filter(([, v]) => v != null))
+    if (e.target.item_type.value === 'boardgame') {
+      const num = name => { const v = Number(e.target[name]?.value); return v || undefined }
+      const str = name => e.target[name]?.value.trim() || undefined
+      const dimL = num('bg_dim_l'), dimW = num('bg_dim_w'), dimH = num('bg_dim_h')
+      const dimUnit = str('bg_dim_unit')
+      const weight = num('bg_weight'), weightUnit = str('bg_weight_unit')
+      customFields = Object.fromEntries(Object.entries({
+        year_published: num('bg_year'),
+        min_players:    num('bg_min_players'),
+        max_players:    num('bg_max_players'),
+        playing_time_min: num('bg_playing_time'),
+        min_age:        num('bg_min_age'),
+        publisher:      str('bg_publisher'),
+        designer:       str('bg_designer'),
+        box_dimensions: (dimL || dimW || dimH) ? { l: dimL, w: dimW, h: dimH, unit: dimUnit } : undefined,
+        weight:         weight ? { value: weight, unit: weightUnit } : undefined,
+      }).filter(([, v]) => v != null))
     }
 
     try {
@@ -1124,8 +1085,17 @@ async function routeItem(matches) {
           <label class="photo-gallery__add" aria-label="Add photo">
             <input type="file" accept="image/*" capture="environment" id="photo-input" style="display:none">
             <span class="photo-gallery__add-icon">📷</span>
-            <span class="text-xs">Add photo</span>
+            <span class="text-xs">Upload</span>
           </label>
+          <button type="button" class="photo-gallery__add" id="photo-url-btn" aria-label="Add photo by URL">
+            <span class="photo-gallery__add-icon">🔗</span>
+            <span class="text-xs">URL</span>
+          </button>
+        </div>
+        <div id="photo-url-form" hidden style="display:flex;gap:var(--space-2);margin-top:var(--space-3)">
+          <input type="url" id="photo-url-input" placeholder="https://…" style="flex:1">
+          <button type="button" class="btn btn-secondary btn-sm" id="photo-url-submit">Add</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="photo-url-cancel">Cancel</button>
         </div>
       `
     }
@@ -1133,7 +1103,13 @@ async function routeItem(matches) {
     setHTML(`
       <div>
         <div class="page-header">
-          <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
+          <div class="flex items-center justify-between">
+            <a href="/inventories/${inventoryId}/items" data-link class="btn btn-ghost btn-sm">← Items</a>
+            <div class="flex gap-2">
+              <a href="/inventories/${inventoryId}/items/${itemId}/edit" data-link class="btn btn-secondary btn-sm">Edit</a>
+              <button class="btn btn-ghost btn-sm" id="btn-delete" style="color:var(--c-danger)">Delete</button>
+            </div>
+          </div>
           <h1 class="page-title mt-4">${escapeHTML(item.name)}</h1>
           ${item.category_name ? `<p class="page-subtitle">${escapeHTML(item.category_name)}</p>` : ''}
         </div>
@@ -1174,11 +1150,19 @@ async function routeItem(matches) {
         ${(() => {
           let cf = {}
           try { cf = JSON.parse(item.custom_fields ?? '{}') } catch {}
+          const d = cf.box_dimensions
+          const dimStr = d ? [d.l, d.w, d.h].filter(Boolean).join(' × ') + (d.unit ? ` ${d.unit}` : '') : null
+          const w = cf.weight
+          const weightStr = w ? `${w.value}${w.unit ? ' ' + w.unit : ''}` : null
           const bggFields = [
             cf.year_published ? ['Published', cf.year_published] : null,
             cf.min_players != null && cf.max_players != null ? ['Players', `${cf.min_players}–${cf.max_players}`] : null,
-            cf.playing_time_min ? ['Playing time', `~${cf.playing_time_min} min`] : null,
+            cf.playing_time_min ? ['Play time', `~${cf.playing_time_min} min`] : null,
             cf.min_age ? ['Min age', `${cf.min_age}+`] : null,
+            cf.publisher ? ['Publisher', escapeHTML(cf.publisher)] : null,
+            cf.designer ? ['Designer', escapeHTML(cf.designer)] : null,
+            dimStr ? ['Box size', escapeHTML(dimStr)] : null,
+            weightStr ? ['Weight', escapeHTML(weightStr)] : null,
           ].filter(Boolean)
           if (!bggFields.length) return ''
           return `
@@ -1220,6 +1204,16 @@ async function routeItem(matches) {
     document.getElementById('btn-use').addEventListener('click', () => logUse('used'))
     document.getElementById('btn-restock').addEventListener('click', () => logUse('restocked'))
 
+    document.getElementById('btn-delete').addEventListener('click', async () => {
+      if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
+      try {
+        await api('DELETE', `/inventories/${inventoryId}/items/${itemId}`)
+        navigate(`/inventories/${inventoryId}/items`)
+      } catch (err) {
+        alert(err.message)
+      }
+    })
+
     // Wire up photo upload
     document.getElementById('photo-input').addEventListener('change', async (e) => {
       const file = e.target.files?.[0]
@@ -1240,6 +1234,32 @@ async function routeItem(matches) {
       }
     })
 
+    // Wire up photo URL
+    document.getElementById('photo-url-btn').addEventListener('click', () => {
+      const form = document.getElementById('photo-url-form')
+      form.hidden = false
+      form.style.display = 'flex'
+      document.getElementById('photo-url-input').focus()
+    })
+    document.getElementById('photo-url-cancel').addEventListener('click', () => {
+      document.getElementById('photo-url-form').hidden = true
+      document.getElementById('photo-url-input').value = ''
+    })
+    async function submitPhotoUrl() {
+      const url = document.getElementById('photo-url-input').value.trim()
+      if (!url) return
+      try {
+        await api('POST', `/inventories/${inventoryId}/items/${itemId}/photos/url`, { url })
+        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+      } catch (err) {
+        alert(err.message)
+      }
+    }
+    document.getElementById('photo-url-submit').addEventListener('click', submitPhotoUrl)
+    document.getElementById('photo-url-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); submitPhotoUrl() }
+    })
+
     // Wire up photo delete
     document.getElementById('photo-gallery').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-photo-id].photo-gallery__delete')
@@ -1257,6 +1277,211 @@ async function routeItem(matches) {
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
+}
+
+async function routeItemEdit(matches) {
+  if (!auth.isLoggedIn) return navigate('/login')
+  const [, inventoryId, itemId] = matches
+  setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
+
+  const [itemData, locData, catData] = await Promise.all([
+    api('GET', `/inventories/${inventoryId}/items/${itemId}`),
+    api('GET', `/inventories/${inventoryId}/locations`),
+    api('GET', `/inventories/${inventoryId}/categories`),
+  ])
+  if (!itemData) return
+  const { item } = itemData
+  const locations = locData?.locations ?? []
+  const categories = catData?.categories ?? []
+
+  let cf = {}
+  try { cf = JSON.parse(item.custom_fields ?? '{}') } catch {}
+  const dim = cf.box_dimensions ?? {}
+  const wt = cf.weight ?? {}
+
+  function buildLocOptions(nodes, parentId = null, depth = 0) {
+    return nodes
+      .filter(n => (n.parent_id ?? null) === parentId)
+      .flatMap(n => [
+        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${escapeHTML(n.name)}</option>`,
+        ...buildLocOptions(nodes, n.id, depth + 1),
+      ])
+  }
+  const locOptions = `<option value="">— None —</option>` + buildLocOptions(locations).join('')
+  const catOptions = `<option value="">— None —</option>` +
+    categories.map(c => `<option value="${c.id}" ${item.category_id === c.id ? 'selected' : ''}>${escapeHTML(c.name)}</option>`).join('')
+
+  const isBG = item.item_type === 'boardgame'
+
+  setHTML(`
+    <div>
+      <div class="page-header">
+        <a href="/inventories/${inventoryId}/items/${itemId}" data-link class="btn btn-ghost btn-sm">← Back</a>
+        <h1 class="page-title mt-4">Edit Item</h1>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div id="form-error" role="alert"></div>
+          <form id="edit-item-form">
+            <div class="field">
+              <label for="item-name">Name <span aria-hidden="true">*</span></label>
+              <input type="text" id="item-name" name="name" required value="${escapeHTML(item.name)}">
+            </div>
+            <div class="field">
+              <label for="item-qty">Quantity</label>
+              <quantity-stepper>
+                <button type="button" data-action="decrement" aria-label="Decrease">−</button>
+                <input type="number" id="item-qty" name="quantity" value="${item.quantity}" min="0" step="any">
+                <button type="button" data-action="increment" aria-label="Increase">+</button>
+              </quantity-stepper>
+            </div>
+            <div class="field">
+              <label for="item-unit">Unit</label>
+              <input type="text" id="item-unit" name="unit" placeholder="e.g. kg, boxes, units" value="${escapeHTML(item.unit ?? '')}">
+            </div>
+            ${locations.length ? `
+            <div class="field">
+              <label for="item-location">Location</label>
+              <select id="item-location" name="location_id">${locOptions}</select>
+            </div>` : ''}
+            ${categories.length ? `
+            <div class="field">
+              <label for="item-category">Category</label>
+              <select id="item-category" name="category_id">${catOptions}</select>
+            </div>` : ''}
+            <div class="field">
+              <label for="item-type">Type</label>
+              <select id="item-type" name="item_type">
+                <option value="physical" ${item.item_type === 'physical' ? 'selected' : ''}>Physical</option>
+                <option value="boardgame" ${item.item_type === 'boardgame' ? 'selected' : ''}>🎲 Board Game</option>
+                <option value="digital" ${item.item_type === 'digital' ? 'selected' : ''}>Digital</option>
+                <option value="subscription" ${item.item_type === 'subscription' ? 'selected' : ''}>Subscription</option>
+                <option value="document" ${item.item_type === 'document' ? 'selected' : ''}>Document</option>
+              </select>
+            </div>
+
+            <div id="boardgame-fields" ${isBG ? '' : 'hidden'}>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-year">Year published</label>
+                  <input type="number" id="bg-year" name="bg_year" min="1900" max="2100" placeholder="e.g. 2021" value="${cf.year_published ?? ''}">
+                </div>
+                <div class="field">
+                  <label for="bg-age">Min age</label>
+                  <input type="number" id="bg-age" name="bg_min_age" min="0" max="99" placeholder="e.g. 10" value="${cf.min_age ?? ''}">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-min-players">Min players</label>
+                  <input type="number" id="bg-min-players" name="bg_min_players" min="1" placeholder="1" value="${cf.min_players ?? ''}">
+                </div>
+                <div class="field">
+                  <label for="bg-max-players">Max players</label>
+                  <input type="number" id="bg-max-players" name="bg_max_players" min="1" placeholder="4" value="${cf.max_players ?? ''}">
+                </div>
+                <div class="field">
+                  <label for="bg-time">Play time (min)</label>
+                  <input type="number" id="bg-time" name="bg_playing_time" min="1" placeholder="60" value="${cf.playing_time_min ?? ''}">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                <div class="field">
+                  <label for="bg-publisher">Publisher</label>
+                  <input type="text" id="bg-publisher" name="bg_publisher" placeholder="e.g. Stonemaier Games" value="${escapeHTML(cf.publisher ?? '')}">
+                </div>
+                <div class="field">
+                  <label for="bg-designer">Designer</label>
+                  <input type="text" id="bg-designer" name="bg_designer" placeholder="e.g. Jamey Stegmaier" value="${escapeHTML(cf.designer ?? '')}">
+                </div>
+              </div>
+              <div class="field">
+                <label>Box dimensions</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:var(--space-2);align-items:center">
+                  <input type="number" id="bg-dim-l" name="bg_dim_l" min="0" step="any" placeholder="L" value="${dim.l ?? ''}">
+                  <input type="number" id="bg-dim-w" name="bg_dim_w" min="0" step="any" placeholder="W" value="${dim.w ?? ''}">
+                  <input type="number" id="bg-dim-h" name="bg_dim_h" min="0" step="any" placeholder="H" value="${dim.h ?? ''}">
+                  <select id="bg-dim-unit" name="bg_dim_unit" style="width:5rem">
+                    <option value="cm" ${(dim.unit ?? 'cm') === 'cm' ? 'selected' : ''}>cm</option>
+                    <option value="in" ${dim.unit === 'in' ? 'selected' : ''}>in</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="bg-weight">Weight</label>
+                <div style="display:grid;grid-template-columns:1fr auto;gap:var(--space-2);align-items:center">
+                  <input type="number" id="bg-weight" name="bg_weight" min="0" step="any" placeholder="0.0" value="${wt.value ?? ''}">
+                  <select id="bg-weight-unit" name="bg_weight_unit" style="width:5rem">
+                    <option value="kg" ${(wt.unit ?? 'kg') === 'kg' ? 'selected' : ''}>kg</option>
+                    <option value="lb" ${wt.unit === 'lb' ? 'selected' : ''}>lb</option>
+                    <option value="g"  ${wt.unit === 'g'  ? 'selected' : ''}>g</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="item-desc">Description</label>
+              <textarea id="item-desc" name="description" rows="2">${escapeHTML(item.description ?? '')}</textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+              <a href="/inventories/${inventoryId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('item-type').addEventListener('change', e => {
+    document.getElementById('boardgame-fields').hidden = e.target.value !== 'boardgame'
+  })
+
+  document.getElementById('edit-item-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('form-error')
+    errEl.innerHTML = ''
+    btn.disabled = true
+
+    let customFields = {}
+    if (e.target.item_type.value === 'boardgame') {
+      const num = name => { const v = Number(e.target[name]?.value); return v || undefined }
+      const str = name => e.target[name]?.value.trim() || undefined
+      const dimL = num('bg_dim_l'), dimW = num('bg_dim_w'), dimH = num('bg_dim_h')
+      const dimUnit = str('bg_dim_unit')
+      const weight = num('bg_weight'), weightUnit = str('bg_weight_unit')
+      customFields = Object.fromEntries(Object.entries({
+        year_published:   num('bg_year'),
+        min_players:      num('bg_min_players'),
+        max_players:      num('bg_max_players'),
+        playing_time_min: num('bg_playing_time'),
+        min_age:          num('bg_min_age'),
+        publisher:        str('bg_publisher'),
+        designer:         str('bg_designer'),
+        box_dimensions: (dimL || dimW || dimH) ? { l: dimL, w: dimW, h: dimH, unit: dimUnit } : undefined,
+        weight:         weight ? { value: weight, unit: weightUnit } : undefined,
+      }).filter(([, v]) => v != null))
+    }
+
+    try {
+      await api('PATCH', `/inventories/${inventoryId}/items/${itemId}`, {
+        name:        e.target.name.value,
+        quantity:    Number(e.target.quantity.value),
+        unit:        e.target.unit.value || null,
+        location_id: e.target.location_id?.value || null,
+        category_id: e.target.category_id?.value || null,
+        item_type:   e.target.item_type.value,
+        description: e.target.description.value || null,
+        custom_fields: customFields,
+      })
+      navigate(`/inventories/${inventoryId}/items/${itemId}`)
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+      btn.disabled = false
+    }
+  })
 }
 
 function routeProfile() {
