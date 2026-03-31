@@ -848,6 +848,65 @@ quantity-stepper input[type="number"] {
   border-radius: var(--radius);
 }
 
+/* ── QR overlay ─────────────────────────────────────────────────── */
+
+.qr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.qr-overlay[hidden] { display: none; }
+
+.qr-modal {
+  background: var(--c-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  max-width: 280px;
+  width: 90%;
+}
+
+.qr-modal__close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--c-text-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+}
+
+.qr-modal__close:hover { background: var(--c-bg); }
+
+.qr-modal__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--c-text);
+  margin: 0;
+}
+
+.qr-modal__url {
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+  word-break: break-all;
+  text-align: center;
+  margin: 0;
+}
+
 /* ── Location tree ──────────────────────────────────────────────── */
 
 .loc-node {

@@ -7,6 +7,12 @@ import itemsRouter from './items.ts'
 
 const router = Router()
 
+// Temporary debug logging
+router.use((req, _res, next) => {
+  if (req.method === 'PATCH') console.log(`[PATCH] ${req.path}`, req.body)
+  next()
+})
+
 // Items are nested: /api/inventories/:inventoryId/items
 router.use('/:inventoryId/items', itemsRouter)
 
@@ -325,11 +331,14 @@ router.get('/:id/locations', requireAuth, async (req, res) => {
   }
 })
 
+const VALID_LOCATION_TYPES = ['room','shelf','drawer','cabinet','closet','box','banker_box','shoebox','bin','basket','tote','bag','other']
+
 // POST /api/inventories/:id/locations
 router.post('/:id/locations', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
-  const { name, parent_id } = req.body
+  const { name, parent_id, location_type } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  const locType = VALID_LOCATION_TYPES.includes(location_type) ? location_type : 'room'
 
   try {
     const access = await db.execute({
@@ -340,10 +349,10 @@ router.post('/:id/locations', requireAuth, async (req, res) => {
 
     const locId = randomUUID()
     await db.execute({
-      sql: 'INSERT INTO locations (id, inventory_id, name, parent_id) VALUES (?, ?, ?, ?)',
-      args: [locId, id, name.trim(), parent_id || null],
+      sql: 'INSERT INTO locations (id, inventory_id, name, parent_id, location_type) VALUES (?, ?, ?, ?, ?)',
+      args: [locId, id, name.trim(), parent_id || null, locType],
     })
-    res.status(201).json({ location: { id: locId, inventory_id: id, name: name.trim(), parent_id: parent_id || null } })
+    res.status(201).json({ location: { id: locId, inventory_id: id, name: name.trim(), parent_id: parent_id || null, location_type: locType } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
@@ -389,19 +398,23 @@ router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
 // PATCH /api/inventories/:id/locations/:locationId
 router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
   const { id, locationId } = req.params as Record<string, string>
-  const { name } = req.body
-  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  const { name, location_type } = req.body
+  if (!name?.trim() && !location_type) return res.status(400).json({ error: 'Nothing to update' })
   try {
     const access = await db.execute({
       sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
       args: [id, req.user!.id],
     })
     if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
-    await db.execute({
-      sql: 'UPDATE locations SET name = ? WHERE id = ? AND inventory_id = ?',
-      args: [name.trim(), locationId, id],
-    })
-    res.json({ location: { id: locationId, name: name.trim() } })
+
+    const updates: string[] = []
+    const args: (string | null)[] = []
+    if (name?.trim()) { updates.push('name = ?'); args.push(name.trim()) }
+    if (location_type && VALID_LOCATION_TYPES.includes(location_type)) { updates.push('location_type = ?'); args.push(location_type) }
+    args.push(locationId, id)
+
+    await db.execute({ sql: `UPDATE locations SET ${updates.join(', ')} WHERE id = ? AND inventory_id = ?`, args })
+    res.json({ location: { id: locationId, ...(name?.trim() ? { name: name.trim() } : {}), ...(location_type ? { location_type } : {}) } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }

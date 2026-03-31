@@ -279,10 +279,43 @@ async function routeInventories() {
           <h1 class="page-title">My Inventories</h1>
           <p class="page-subtitle">Your collections, organized</p>
         </div>
-        <a href="/inventories/new" data-link class="btn btn-primary btn-sm">+ New</a>
+        <div style="display:flex;gap:var(--space-2);align-items:center">
+          <button id="btn-qr" class="btn btn-ghost btn-sm" aria-label="Show QR code for this app" title="Show QR code">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="5" y="5" width="3" height="3" fill="currentColor" stroke="none"/><rect x="16" y="5" width="3" height="3" fill="currentColor" stroke="none"/><rect x="5" y="16" width="3" height="3" fill="currentColor" stroke="none"/>
+              <path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 20h3"/>
+            </svg>
+          </button>
+          <a href="/inventories/new" data-link class="btn btn-primary btn-sm">+ New</a>
+        </div>
       </div>
       ${listHTML}
+
+      <div id="qr-overlay" class="qr-overlay" hidden>
+        <div class="qr-modal">
+          <button class="qr-modal__close" id="btn-qr-close" aria-label="Close">×</button>
+          <p class="qr-modal__label">Scan to open this app</p>
+          <div id="qr-canvas"></div>
+          <p class="qr-modal__url" id="qr-url"></p>
+        </div>
+      </div>
     `)
+
+    const appUrl = window.location.origin
+    document.getElementById('qr-url').textContent = appUrl
+
+    const overlay = document.getElementById('qr-overlay')
+    let qrRendered = false
+    document.getElementById('btn-qr').addEventListener('click', () => {
+      overlay.hidden = false
+      if (!qrRendered) {
+        new QRCode(document.getElementById('qr-canvas'), { text: appUrl, width: 200, height: 200 })
+        qrRendered = true
+      }
+    })
+    document.getElementById('btn-qr-close').addEventListener('click', () => { overlay.hidden = true })
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true })
 
     if (inventories.length > 1) {
       const list = document.getElementById('inv-list')
@@ -463,8 +496,9 @@ async function routeInventory(matches) {
               <div class="text-sm font-medium mb-2">Locations</div>
               <div id="loc-tree"></div>
               <form id="add-room-form" class="inline-add-form mt-2">
-                <input type="text" id="room-input" placeholder="Add room…" maxlength="80">
-                <button type="submit" class="btn btn-secondary btn-sm">+ Room</button>
+                <input type="text" id="room-input" placeholder="Name…" maxlength="80">
+                <select id="room-type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface)"></select>
+                <button type="submit" class="btn btn-secondary btn-sm">+ Add</button>
               </form>
             </div>
 
@@ -561,9 +595,23 @@ async function routeInventory(matches) {
 
     // ── Locations & Categories ─────────────────────────────────────────────
     if (canEdit) {
-      // Hierarchical location tree (depth 0=room, 1=shelf, 2=container)
-      const depthLabel = ['Room', 'Shelf', 'Container']
-      const childLabel = ['+ Shelf', '+ Container']
+      const LOC_TYPES = [
+        { value: 'room',       label: 'Room',       icon: '🏠' },
+        { value: 'closet',     label: 'Closet',     icon: '🚪' },
+        { value: 'shelf',      label: 'Shelf',      icon: '📚' },
+        { value: 'drawer',     label: 'Drawer',     icon: '🗂️' },
+        { value: 'cabinet',    label: 'Cabinet',    icon: '🗄️' },
+        { value: 'box',        label: 'Box',        icon: '📦' },
+        { value: 'banker_box', label: 'Banker Box', icon: '🗃️' },
+        { value: 'shoebox',    label: 'Shoebox',    icon: '👟' },
+        { value: 'bin',        label: 'Bin',        icon: '🪣' },
+        { value: 'basket',     label: 'Basket',     icon: '🧺' },
+        { value: 'tote',       label: 'Tote',       icon: '🛍️' },
+        { value: 'bag',        label: 'Bag',        icon: '👜' },
+        { value: 'other',      label: 'Other',      icon: '📍' },
+      ]
+      const locTypeMap = Object.fromEntries(LOC_TYPES.map(t => [t.value, t]))
+      const locTypeOptions = LOC_TYPES.map(t => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join('')
 
       function buildTree(nodes, parentId = null) {
         return nodes
@@ -619,22 +667,34 @@ async function routeInventory(matches) {
             })
           })
         })
+        container.querySelectorAll('.loc-type-select').forEach(sel => {
+          sel.addEventListener('change', async () => {
+            const id = sel.dataset.id
+            try {
+              await api('PATCH', `/inventories/${inventoryId}/locations/${id}`, { location_type: sel.value })
+              const loc = locations.find(l => l.id === id)
+              if (loc) loc.location_type = sel.value
+            } catch (err) { alert(err.message); renderLocTree() }
+          })
+        })
         container.querySelectorAll('.loc-add-child-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             const form = container.querySelector(`.loc-child-form[data-parent="${btn.dataset.parent}"]`)
-            if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input').focus() }
+            if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input[name="loc-name"]').focus() }
           })
         })
         container.querySelectorAll('.loc-child-form').forEach(form => {
           form.addEventListener('submit', async e => {
             e.preventDefault()
-            const input = form.querySelector('input')
+            const input = form.querySelector('input[name="loc-name"]')
+            const typeSelect = form.querySelector('select[name="loc-type"]')
             const name = input.value.trim()
             if (!name) return
             try {
               const data = await api('POST', `/inventories/${inventoryId}/locations`, {
                 name,
                 parent_id: form.dataset.parent,
+                location_type: typeSelect.value,
               })
               if (data) { locations.push(data.location); renderLocTree() }
               input.value = ''
@@ -645,33 +705,40 @@ async function routeInventory(matches) {
 
       function renderNodes(nodes, depth) {
         if (!nodes.length && depth > 0) return ''
-        return nodes.map(node => `
+        return nodes.map(node => {
+          const t = locTypeMap[node.location_type] ?? locTypeMap['room']
+          const typeSelectHTML = LOC_TYPES.map(t2 =>
+            `<option value="${t2.value}"${t2.value === node.location_type ? ' selected' : ''}>${t2.icon} ${t2.label}</option>`
+          ).join('')
+          return `
           <div class="loc-node loc-depth-${depth}">
             <div class="loc-node__row">
-              <span class="loc-depth-label">${depthLabel[depth] ?? 'Location'}</span>
               <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
-              ${depth < 2 ? `<button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}">${childLabel[depth]}</button>` : ''}
+              <select class="loc-type-select" data-id="${node.id}" aria-label="Location type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface);cursor:pointer">${typeSelectHTML}</select>
+              <button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}">+ Add</button>
               <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" aria-label="Delete">×</button>
             </div>
-            ${depth < 2 ? `
             <form class="inline-add-form loc-child-form mt-1 mb-1" data-parent="${node.id}" hidden>
-              <input type="text" placeholder="Add ${depthLabel[depth + 1].toLowerCase()}…" maxlength="80">
+              <input type="text" name="loc-name" placeholder="Name…" maxlength="80">
+              <select name="loc-type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface)">${locTypeOptions}</select>
               <button type="submit" class="btn btn-secondary btn-sm">Add</button>
-            </form>` : ''}
+            </form>
             ${node.children.length ? `<div class="loc-children">${renderNodes(node.children, depth + 1)}</div>` : ''}
           </div>
-        `).join('')
+        `}).join('')
       }
 
+      document.getElementById('room-type').innerHTML = locTypeOptions
       renderLocTree()
 
       document.getElementById('add-room-form').addEventListener('submit', async e => {
         e.preventDefault()
         const input = document.getElementById('room-input')
+        const typeSelect = document.getElementById('room-type')
         const name = input.value.trim()
         if (!name) return
         try {
-          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name })
+          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name, location_type: typeSelect.value })
           if (data) { locations.push(data.location); renderLocTree() }
           input.value = ''
         } catch (err) { alert(err.message) }
@@ -856,14 +923,18 @@ async function routeLocations(matches) {
       return Number(node.item_count ?? 0) + node.children.reduce((s, c) => s + totalCount(c), 0)
     }
 
+    const LOC_TYPE_ICON = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+
     function renderTree(nodes, depth = 0) {
       if (!nodes.length) return ''
       return nodes.map(node => {
         const total = totalCount(node)
         const indent = depth * 1.25
+        const icon = LOC_TYPE_ICON[node.location_type] ?? '📍'
         return `
           <a href="/inventories/${inventoryId}/locations/${node.id}" data-link
              class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
+            <span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>
             <span class="location-row__name">${escapeHTML(node.name)}</span>
             <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
           </a>
@@ -921,6 +992,7 @@ async function routeLocation(matches) {
     const parent = allLocs.find(l => l.id === current.parent_id)
     const items = itemsData?.items ?? []
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
+    const locTypeIcon = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
 
     // Count items for each child (direct only shown in badge, totals would need recursion)
     function childCount(locId) {
@@ -933,6 +1005,7 @@ async function routeLocation(matches) {
         <div class="location-tree">
           ${children.map(c => `
             <a href="/inventories/${inventoryId}/locations/${c.id}" data-link class="location-row">
+              <span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>
               <span class="location-row__name">${escapeHTML(c.name)}</span>
               <span class="location-row__count">${childCount(c.id)} item${childCount(c.id) !== 1 ? 's' : ''}</span>
             </a>
@@ -989,7 +1062,7 @@ async function routeLocation(matches) {
     setHTML(`
       <div>
         <div class="page-header">
-          <h1 class="page-title">${escapeHTML(current.name)}</h1>
+          <h1 class="page-title">${locTypeIcon[current.location_type] ?? '📍'} ${escapeHTML(current.name)}</h1>
         </div>
         ${sublocsHTML}
         ${itemsHTML}
@@ -1091,11 +1164,12 @@ async function routeItemNew(matches) {
     { label: 'Add Item' },
   ])
 
+  const LOC_TYPE_ICON_NEW = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${escapeHTML(n.name)}</option>`,
+        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ${escapeHTML(n.name)}</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }
@@ -1558,11 +1632,12 @@ async function routeItemEdit(matches) {
   const dim = cf.box_dimensions ?? {}
   const wt = cf.weight ?? {}
 
+  const LOC_TYPE_ICON_EDIT = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${escapeHTML(n.name)}</option>`,
+        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ${escapeHTML(n.name)}</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }

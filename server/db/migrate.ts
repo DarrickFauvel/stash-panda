@@ -123,6 +123,9 @@ for (const sql of statements) {
 try {
   await db.execute('ALTER TABLE inventory_members ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
 } catch { /* column already exists */ }
+try {
+  await db.execute("ALTER TABLE locations ADD COLUMN location_type TEXT NOT NULL DEFAULT 'room'")
+} catch { /* column already exists */ }
 
 // Add 'boardgame' to items.item_type CHECK constraint (requires table rebuild in SQLite)
 {
