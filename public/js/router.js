@@ -497,7 +497,7 @@ async function routeInventory(matches) {
               <div id="loc-tree"></div>
               <form id="add-room-form" class="inline-add-form mt-2">
                 <input type="text" id="room-input" placeholder="Name…" maxlength="80">
-                <select id="room-type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface)"></select>
+                <select id="room-type" class="loc-form-type-select"></select>
                 <button type="submit" class="btn btn-secondary btn-sm">+ Add</button>
               </form>
             </div>
@@ -674,6 +674,7 @@ async function routeInventory(matches) {
               await api('PATCH', `/inventories/${inventoryId}/locations/${id}`, { location_type: sel.value })
               const loc = locations.find(l => l.id === id)
               if (loc) loc.location_type = sel.value
+              renderLocTree()
             } catch (err) { alert(err.message); renderLocTree() }
           })
         })
@@ -714,13 +715,16 @@ async function routeInventory(matches) {
           <div class="loc-node loc-depth-${depth}">
             <div class="loc-node__row">
               <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
-              <select class="loc-type-select" data-id="${node.id}" aria-label="Location type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface);cursor:pointer">${typeSelectHTML}</select>
-              <button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}">+ Add</button>
-              <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" aria-label="Delete">×</button>
+              <label class="loc-type-btn" title="Change type">
+                <span class="loc-type-btn__icon" aria-hidden="true">${t.icon}</span>
+                <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
+              </label>
+              <button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}" title="Add child location" aria-label="Add child location">+</button>
+              <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" title="Delete" aria-label="Delete location">×</button>
             </div>
             <form class="inline-add-form loc-child-form mt-1 mb-1" data-parent="${node.id}" hidden>
               <input type="text" name="loc-name" placeholder="Name…" maxlength="80">
-              <select name="loc-type" style="font-size:.75rem;padding:2px 4px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-surface)">${locTypeOptions}</select>
+              <select name="loc-type" class="loc-form-type-select">${locTypeOptions}</select>
               <button type="submit" class="btn btn-secondary btn-sm">Add</button>
             </form>
             ${node.children.length ? `<div class="loc-children">${renderNodes(node.children, depth + 1)}</div>` : ''}
