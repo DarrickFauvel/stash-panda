@@ -1129,6 +1129,16 @@ quantity-stepper input[type="number"] {
 
 /* ── Photo gallery ──────────────────────────────────────────────── */
 
+.item-hero-photo {
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  background: var(--c-bg);
+  display: block;
+  margin-bottom: var(--space-4);
+}
+
 .photo-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));

@@ -1564,6 +1564,25 @@ async function routeItem(matches) {
       `
     }
 
+    const heroPhoto = photos[0] ?? null
+
+    let cf = {}
+    try { cf = JSON.parse(item.custom_fields ?? '{}') } catch {}
+    const d = cf.box_dimensions
+    const dimStr = d ? [d.l, d.w, d.h].filter(Boolean).join(' × ') + (d.unit ? ` ${d.unit}` : '') : null
+    const w = cf.weight
+    const weightStr = w ? `${w.value}${w.unit ? ' ' + w.unit : ''}` : null
+    const bggFields = [
+      cf.year_published ? ['Published', cf.year_published] : null,
+      cf.min_players != null && cf.max_players != null ? ['Players', `${cf.min_players}–${cf.max_players}`] : null,
+      cf.playing_time_min ? ['Play time', `~${cf.playing_time_min} min`] : null,
+      cf.min_age ? ['Min age', `${cf.min_age}+`] : null,
+      cf.publisher ? ['Publisher', escapeHTML(cf.publisher)] : null,
+      cf.designer ? ['Designer', escapeHTML(cf.designer)] : null,
+      dimStr ? ['Box size', escapeHTML(dimStr)] : null,
+      weightStr ? ['Weight', escapeHTML(weightStr)] : null,
+    ].filter(Boolean)
+
     setHTML(`
       <div>
         <div class="page-header">
@@ -1577,15 +1596,25 @@ async function routeItem(matches) {
           ${item.category_name ? `<p class="page-subtitle">${escapeHTML(item.category_name)}</p>` : ''}
         </div>
 
+        ${heroPhoto ? `<img src="${heroPhoto.url}" alt="${escapeHTML(item.name)}" class="item-hero-photo">` : ''}
+
+        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm" style="white-space:pre-wrap">${escapeHTML(item.description)}</div></div>` : ''}
+
+        ${bggFields.length ? `
+        <div class="card mb-4">
+          <div class="card-header"><h2 class="section-title" style="margin:0">🎲 Board Game Info</h2></div>
+          <div class="card-body">
+            <dl class="bgg-info-grid">
+              ${bggFields.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}
+            </dl>
+          </div>
+        </div>` : ''}
+
         <div class="card mb-4">
           <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <div class="text-xs text-muted font-medium" style="text-transform:uppercase;letter-spacing:.05em">Quantity</div>
-                <div style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2">
-                  ${item.quantity}${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
-                </div>
-              </div>
+            <div class="text-xs text-muted font-medium mb-1" style="text-transform:uppercase;letter-spacing:.05em">Quantity</div>
+            <div style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2">
+              ${item.quantity}${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
             </div>
           </div>
         </div>
@@ -1598,37 +1627,6 @@ async function routeItem(matches) {
             ${photosHTML(photos)}
           </div>
         </div>
-
-        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm" style="white-space:pre-wrap">${escapeHTML(item.description)}</div></div>` : ''}
-
-        ${(() => {
-          let cf = {}
-          try { cf = JSON.parse(item.custom_fields ?? '{}') } catch {}
-          const d = cf.box_dimensions
-          const dimStr = d ? [d.l, d.w, d.h].filter(Boolean).join(' × ') + (d.unit ? ` ${d.unit}` : '') : null
-          const w = cf.weight
-          const weightStr = w ? `${w.value}${w.unit ? ' ' + w.unit : ''}` : null
-          const bggFields = [
-            cf.year_published ? ['Published', cf.year_published] : null,
-            cf.min_players != null && cf.max_players != null ? ['Players', `${cf.min_players}–${cf.max_players}`] : null,
-            cf.playing_time_min ? ['Play time', `~${cf.playing_time_min} min`] : null,
-            cf.min_age ? ['Min age', `${cf.min_age}+`] : null,
-            cf.publisher ? ['Publisher', escapeHTML(cf.publisher)] : null,
-            cf.designer ? ['Designer', escapeHTML(cf.designer)] : null,
-            dimStr ? ['Box size', escapeHTML(dimStr)] : null,
-            weightStr ? ['Weight', escapeHTML(weightStr)] : null,
-          ].filter(Boolean)
-          if (!bggFields.length) return ''
-          return `
-          <div class="card mb-4">
-            <div class="card-header"><h2 class="section-title" style="margin:0">🎲 Board Game Info</h2></div>
-            <div class="card-body">
-              <dl class="bgg-info-grid">
-                ${bggFields.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}
-              </dl>
-            </div>
-          </div>`
-        })()}
 
       </div>
     `)
