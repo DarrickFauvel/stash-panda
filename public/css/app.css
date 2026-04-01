@@ -483,6 +483,37 @@ quantity-stepper input[type="number"] {
   font-weight: var(--weight-medium);
 }
 
+/* ─── Items Search & Filter ──────────────────────────────────────────────── */
+.items-search-bar {
+  margin-bottom: var(--space-3);
+}
+
+.items-search-bar input[type="search"] {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+}
+
+.items-filters {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  width: auto;
+}
+
+.items-count {
+  margin-bottom: var(--space-2);
+  min-height: 1.2em;
+}
+
 /* ─── List ───────────────────────────────────────────────────────────────── */
 .item-list {
   display: flex;

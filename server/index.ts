@@ -9,6 +9,7 @@ import inventoryRoutes from './routes/inventories.ts'
 import inviteRoutes from './routes/invite.ts'
 import eventsRoutes from './routes/events.ts'
 import bggRoutes from './routes/bgg.ts'
+import searchRoutes from './routes/search.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
@@ -30,6 +31,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/inventories', inventoryRoutes)
 app.use('/api/invite', inviteRoutes)
 app.use('/api/bgg', bggRoutes)
+app.use('/api/search', searchRoutes)
 app.use('/events', eventsRoutes)
 
 // SPA fallback — serves app shell for all non-API routes

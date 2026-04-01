@@ -290,7 +290,13 @@ async function routeInventories() {
           <a href="/inventories/new" data-link class="btn btn-primary btn-sm">+ New</a>
         </div>
       </div>
-      ${listHTML}
+
+      <div class="items-search-bar">
+        <input type="search" id="global-search" placeholder="Search all items…" autocomplete="off">
+      </div>
+
+      <div id="search-results" hidden></div>
+      <div id="inv-section">${listHTML}</div>
 
       <div id="qr-overlay" class="qr-overlay" hidden>
         <div class="qr-modal">
@@ -366,6 +372,56 @@ async function routeInventories() {
         dragSrc = null
       })
     }
+
+    // ── Global search ────────────────────────────────────────────────────────
+    const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
+    const searchEl    = document.getElementById('global-search')
+    const resultsEl   = document.getElementById('search-results')
+    const invSection  = document.getElementById('inv-section')
+    let searchTimer   = null
+
+    searchEl.addEventListener('input', () => {
+      clearTimeout(searchTimer)
+      const q = searchEl.value.trim()
+      if (!q) {
+        resultsEl.hidden = true
+        resultsEl.innerHTML = ''
+        invSection.hidden = false
+        return
+      }
+      searchTimer = setTimeout(async () => {
+        try {
+          const data = await api('GET', `/search?q=${encodeURIComponent(q)}`)
+          if (!data) return
+          const { items } = data
+          invSection.hidden = true
+          resultsEl.hidden = false
+          if (items.length === 0) {
+            resultsEl.innerHTML = `<div class="empty-state">
+              <div class="empty-state__icon">🔍</div>
+              <div class="empty-state__title">No results for "${escapeHTML(q)}"</div>
+            </div>`
+          } else {
+            resultsEl.innerHTML = `<div class="item-list">
+              ${items.map(item => `
+                <a href="/inventories/${item.inventory_id}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
+                  ${item.photo_url
+                    ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
+                    : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
+                  }
+                  <div class="item-row__info">
+                    <div class="item-row__name">${escapeHTML(item.name)}</div>
+                    <div class="item-row__meta">${escapeHTML(item.inventory_name)}${item.location_name ? ' · ' + escapeHTML(item.location_name) : ''}${item.category_name ? ' · ' + escapeHTML(item.category_name) : ''}</div>
+                  </div>
+                  <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
+                </a>
+              `).join('')}
+            </div>`
+          }
+        } catch { /* silent — don't disrupt the home screen */ }
+      }, 200)
+    })
+
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
@@ -1091,56 +1147,56 @@ async function routeItems(matches) {
   const inventoryId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
-  const qs = location.search  // preserve ?location=, ?category=, etc.
-
   try {
     const [invData, itemsData] = await Promise.all([
       api('GET', `/inventories/${inventoryId}`),
-      api('GET', `/inventories/${inventoryId}/items${qs}`),
+      api('GET', `/inventories/${inventoryId}/items`),
     ])
     if (!invData || !itemsData) return
 
     const { inventory } = invData
-    const { items } = itemsData
-    const locationFilter = new URLSearchParams(qs).get('location')
-    const filterLocName = locationFilter ? items[0]?.location_name : null
+    const allItems = itemsData.items
 
     setBreadcrumb([
       { label: 'Inventories', href: '/inventories' },
       { label: inventory.name, href: `/inventories/${inventoryId}` },
-      ...(locationFilter ? [
-        { label: 'Locations', href: `/inventories/${inventoryId}/locations` },
-        { label: filterLocName ?? 'Location', href: `/inventories/${inventoryId}/locations/${locationFilter}` },
-        { label: 'Items' },
-      ] : [
-        { label: 'Items' },
-      ]),
+      { label: 'Items' },
     ])
 
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
+    const typeLabel = { physical: 'Physical', digital: 'Digital', subscription: 'Subscription', document: 'Document', boardgame: 'Board Game' }
 
-    const listHTML = items.length === 0
-      ? `<div class="empty-state">
-           <div class="empty-state__icon">✨</div>
-           <div class="empty-state__title">Nothing stashed yet</div>
-           <div class="empty-state__body">Add your first item to start tracking.</div>
-           <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary">Add item</a>
-         </div>`
-      : `<div class="item-list">
-           ${items.map(item => `
-             <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
-               ${item.photo_url
-                 ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
-                 : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
-               }
-               <div class="item-row__info">
-                 <div class="item-row__name">${escapeHTML(item.name)}</div>
-                 <div class="item-row__meta">${escapeHTML(item.category_name ?? item.location_name ?? item.item_type)}</div>
-               </div>
-               <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
-             </a>
-           `).join('')}
-         </div>`
+    // Derive unique categories from items
+    const categories = [...new Map(
+      allItems.filter(i => i.category_id).map(i => [i.category_id, i.category_name])
+    ).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+
+    const types = [...new Set(allItems.map(i => i.item_type))].sort()
+
+    function renderList(items) {
+      if (items.length === 0) {
+        return `<div class="empty-state">
+          <div class="empty-state__icon">🔍</div>
+          <div class="empty-state__title">No items match</div>
+          <div class="empty-state__body">Try adjusting your search or filters.</div>
+        </div>`
+      }
+      return `<div class="item-list">
+        ${items.map(item => `
+          <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
+            ${item.photo_url
+              ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
+              : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
+            }
+            <div class="item-row__info">
+              <div class="item-row__name">${escapeHTML(item.name)}</div>
+              <div class="item-row__meta">${escapeHTML(item.category_name ?? item.location_name ?? item.item_type)}</div>
+            </div>
+            <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
+          </a>
+        `).join('')}
+      </div>`
+    }
 
     setHTML(`
       <div>
@@ -1148,9 +1204,93 @@ async function routeItems(matches) {
           <h1 class="page-title">Items</h1>
           <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
         </div>
-        ${listHTML}
+
+        ${allItems.length > 0 ? `
+        <div class="items-search-bar">
+          <input type="search" id="item-search" placeholder="Search items…" autocomplete="off">
+        </div>` : ''}
+
+        <div class="items-filters" id="items-filters">
+          ${categories.length > 0 ? `
+          <select id="filter-category" class="filter-select">
+            <option value="">All categories</option>
+            ${categories.map(([id, name]) => `<option value="${id}">${escapeHTML(name)}</option>`).join('')}
+          </select>` : ''}
+          ${types.length > 1 ? `
+          <select id="filter-type" class="filter-select">
+            <option value="">All types</option>
+            ${types.map(t => `<option value="${t}">${typeLabel[t] ?? t}</option>`).join('')}
+          </select>` : ''}
+          ${allItems.length > 0 ? `
+          <select id="filter-sort" class="filter-select">
+            <option value="name">Name A–Z</option>
+            <option value="quantity">Quantity</option>
+            <option value="added">Recently added</option>
+            <option value="value">Value</option>
+          </select>` : ''}
+        </div>
+
+        <div id="item-count" class="items-count text-sm text-muted"></div>
+        <div id="items-list-container">
+          ${allItems.length === 0
+            ? `<div class="empty-state">
+                <div class="empty-state__icon">✨</div>
+                <div class="empty-state__title">Nothing stashed yet</div>
+                <div class="empty-state__body">Add your first item to start tracking.</div>
+                <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary">Add item</a>
+              </div>`
+            : renderList(allItems)
+          }
+        </div>
       </div>
     `)
+
+    if (allItems.length === 0) return
+
+    // ── Filter logic ────────────────────────────────────────────────────────
+    const searchEl = document.getElementById('item-search')
+    const catEl    = document.getElementById('filter-category')
+    const typeEl   = document.getElementById('filter-type')
+    const sortEl   = document.getElementById('filter-sort')
+    const listEl   = document.getElementById('items-list-container')
+    const countEl  = document.getElementById('item-count')
+
+    const sortFns = {
+      name:     (a, b) => a.name.localeCompare(b.name),
+      quantity: (a, b) => b.quantity - a.quantity,
+      added:    (a, b) => b.created_at - a.created_at,
+      value:    (a, b) => (b.value ?? 0) - (a.value ?? 0),
+    }
+
+    function applyFilters() {
+      const q    = searchEl?.value.trim().toLowerCase() ?? ''
+      const cat  = catEl?.value ?? ''
+      const type = typeEl?.value ?? ''
+      const sort = sortEl?.value ?? 'name'
+
+      let filtered = allItems.filter(item => {
+        if (cat  && item.category_id !== cat)   return false
+        if (type && item.item_type   !== type)   return false
+        if (q) {
+          const hay = `${item.name} ${item.description ?? ''} ${item.tags ?? ''}`.toLowerCase()
+          if (!hay.includes(q)) return false
+        }
+        return true
+      })
+
+      filtered = [...filtered].sort(sortFns[sort] ?? sortFns.name)
+
+      listEl.innerHTML = renderList(filtered)
+      countEl.textContent = filtered.length !== allItems.length
+        ? `${filtered.length} of ${allItems.length} items`
+        : ''
+    }
+
+    searchEl?.addEventListener('input', applyFilters)
+    catEl?.addEventListener('change', applyFilters)
+    typeEl?.addEventListener('change', applyFilters)
+    sortEl?.addEventListener('change', applyFilters)
+
   } catch (err) {
     setHTML(`<div class="alert alert-error">${err.message}</div>`)
   }
