@@ -411,7 +411,7 @@ async function routeInventories() {
                   }
                   <div class="item-row__info">
                     <div class="item-row__name">${escapeHTML(item.name)}</div>
-                    <div class="item-row__meta">${escapeHTML(item.inventory_name)}${item.location_name ? ' · ' + escapeHTML(item.location_name) : ''}${item.category_name ? ' · ' + escapeHTML(item.category_name) : ''}</div>
+                    <div class="item-row__meta">${escapeHTML(item.inventory_name)}${item.location_path ? ' · ' + escapeHTML(item.location_path) : ''}${item.category_name ? ' · ' + escapeHTML(item.category_name) : ''}</div>
                   </div>
                   <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
                 </a>
