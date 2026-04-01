@@ -265,7 +265,7 @@ async function routeInventories() {
                  <div class="item-row__photo item-row__photo--placeholder">${inventoryIcon(inv.name)}</div>
                  <div class="item-row__info">
                    <div class="item-row__name">${escapeHTML(inv.name)}</div>
-                   <div class="item-row__meta">${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
+                   <div class="item-row__meta">${inv.subtitle ? escapeHTML(inv.subtitle) + ' · ' : ''}${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
                  </div>
                </a>
                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="text-muted" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
@@ -390,6 +390,10 @@ function routeInventoryNew() {
               <label for="inv-name">Name</label>
               <input type="text" id="inv-name" name="name" placeholder="e.g. Home, Workshop, Office" required autofocus>
             </div>
+            <div class="field">
+              <label for="inv-subtitle">Description <span class="text-muted">(optional)</span></label>
+              <input type="text" id="inv-subtitle" name="subtitle" placeholder="e.g. 123 Lawrence St, Ford Focus 2015 (red)">
+            </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Create inventory</button>
               <a href="/inventories" data-link class="btn btn-secondary">Cancel</a>
@@ -407,7 +411,7 @@ function routeInventoryNew() {
     errEl.innerHTML = ''
     btn.disabled = true
     try {
-      const data = await api('POST', '/inventories', { name: e.target.name.value })
+      const data = await api('POST', '/inventories', { name: e.target.name.value, subtitle: e.target.subtitle.value })
       if (data) navigate(`/inventories/${data.inventory.id}`)
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
@@ -469,7 +473,7 @@ async function routeInventory(matches) {
             <div>
               <h1 class="page-title">${escapeHTML(inventory.name)}</h1>
               <p class="page-subtitle">
-                ${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}
+                ${inventory.subtitle ? escapeHTML(inventory.subtitle) + ' · ' : ''}${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}
                 · <span class="badge ${roleBadgeClass[inventory.role]}">${roleLabel[inventory.role]}</span>
               </p>
             </div>
@@ -566,13 +570,17 @@ async function routeInventory(matches) {
             <h2 class="font-semi">Settings</h2>
           </div>
           <div class="card-body">
-            <p class="text-sm text-muted mb-3">Rename this inventory</p>
             <div id="rename-msg" role="alert"></div>
-            <form id="rename-form" class="flex gap-3 items-center">
-              <div class="field" style="flex:1;margin:0">
+            <form id="rename-form">
+              <div class="field">
+                <label for="rename-input">Name</label>
                 <input type="text" id="rename-input" name="name" value="${escapeHTML(inventory.name)}" required>
               </div>
-              <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+              <div class="field">
+                <label for="subtitle-input">Description <span class="text-muted">(optional)</span></label>
+                <input type="text" id="subtitle-input" name="subtitle" value="${escapeHTML(inventory.subtitle ?? '')}" placeholder="e.g. 123 Lawrence St, Ford Focus 2015 (red)">
+              </div>
+              <button type="submit" class="btn btn-secondary btn-sm">Save</button>
             </form>
           </div>
         </div>
@@ -874,7 +882,7 @@ async function routeInventory(matches) {
         const msgEl = document.getElementById('rename-msg')
         msgEl.innerHTML = ''
         try {
-          await api('PATCH', `/inventories/${inventoryId}`, { name: e.target.name.value.trim() })
+          await api('PATCH', `/inventories/${inventoryId}`, { name: e.target.name.value.trim(), subtitle: e.target.subtitle.value.trim() })
           navigate(`/inventories/${inventoryId}`)
         } catch (err) {
           msgEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
@@ -1199,7 +1207,7 @@ async function routeItemNew(matches) {
               <label for="item-qty">Quantity</label>
               <quantity-stepper>
                 <button type="button" data-action="decrement" aria-label="Decrease">−</button>
-                <input type="number" id="item-qty" name="quantity" value="1" min="0" step="any">
+                <input type="number" id="item-qty" name="quantity" value="1" min="0" step="1">
                 <button type="button" data-action="increment" aria-label="Increase">+</button>
               </quantity-stepper>
             </div>
@@ -1380,7 +1388,7 @@ async function routeItem(matches) {
       api('GET', `/inventories/${inventoryId}`),
     ])
     if (!data) return
-    const { item, photos, logs } = data
+    const { item, photos } = data
 
     setBreadcrumb([
       { label: 'Inventories', href: '/inventories' },
@@ -1388,19 +1396,6 @@ async function routeItem(matches) {
       { label: 'Items', href: `/inventories/${inventoryId}/items` },
       { label: item.name },
     ])
-
-    const logsHTML = logs.length === 0
-      ? '<p class="text-sm text-muted">No usage history yet.</p>'
-      : logs.map(log => `
-          <div class="flex items-center gap-3 text-sm">
-            <span class="badge ${log.direction === 'used' ? 'badge-orange' : 'badge-green'}">
-              ${log.direction === 'used' ? '−' : '+'}${log.amount}
-            </span>
-            <span class="text-muted">${escapeHTML(log.user_name ?? 'Unknown')}</span>
-            <span class="text-muted">${formatDate(log.created_at)}</span>
-            ${log.note ? `<span class="text-muted">· ${escapeHTML(log.note)}</span>` : ''}
-          </div>
-        `).join('')
 
     function photosHTML(photoList) {
       return `
@@ -1451,15 +1446,6 @@ async function routeItem(matches) {
                   ${item.quantity}${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
                 </div>
               </div>
-              <quantity-stepper data-item-id="${item.id}" data-inventory-id="${inventoryId}">
-                <button type="button" data-action="decrement" aria-label="Use one">−</button>
-                <input type="number" value="1" min="0.01" step="any" aria-label="Amount">
-                <button type="button" data-action="increment" aria-label="Restock one">+</button>
-              </quantity-stepper>
-            </div>
-            <div class="flex gap-2">
-              <button class="btn btn-secondary btn-sm" id="btn-use">Log use</button>
-              <button class="btn btn-secondary btn-sm" id="btn-restock">Restock</button>
             </div>
           </div>
         </div>
@@ -1504,33 +1490,8 @@ async function routeItem(matches) {
           </div>`
         })()}
 
-        <div class="card">
-          <div class="card-header">
-            <h2 class="section-title" style="margin:0">Usage history</h2>
-          </div>
-          <div class="card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
-            ${logsHTML}
-          </div>
-        </div>
       </div>
     `)
-
-    // Wire up use/restock buttons
-    async function logUse(direction) {
-      const stepper = document.querySelector('quantity-stepper input')
-      const amount = Number(stepper?.value ?? 1)
-      try {
-        const res = await api('POST', `/inventories/${inventoryId}/items/${itemId}/use`, {
-          amount, direction, note: ''
-        })
-        if (res) navigate(`/inventories/${inventoryId}/items/${itemId}`)
-      } catch (err) {
-        alert(err.message)
-      }
-    }
-
-    document.getElementById('btn-use').addEventListener('click', () => logUse('used'))
-    document.getElementById('btn-restock').addEventListener('click', () => logUse('restocked'))
 
     document.getElementById('btn-delete').addEventListener('click', async () => {
       if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
@@ -1668,7 +1629,7 @@ async function routeItemEdit(matches) {
               <label for="item-qty">Quantity</label>
               <quantity-stepper>
                 <button type="button" data-action="decrement" aria-label="Decrease">−</button>
-                <input type="number" id="item-qty" name="quantity" value="${item.quantity}" min="0" step="any">
+                <input type="number" id="item-qty" name="quantity" value="${item.quantity}" min="0" step="1">
                 <button type="button" data-action="increment" aria-label="Increase">+</button>
               </quantity-stepper>
             </div>

@@ -136,23 +136,12 @@ router.get('/:itemId', requireAuth, async (req, res) => {
     })
     if (!result.rows[0]) return res.status(404).json({ error: 'Item not found' })
 
-    const [photos, logs] = await Promise.all([
-      db.execute({
-        sql: 'SELECT * FROM item_photos WHERE item_id = ? ORDER BY created_at ASC',
-        args: [itemId],
-      }),
-      db.execute({
-        sql: `SELECT ul.*, u.name AS user_name
-              FROM usage_logs ul
-              LEFT JOIN users u ON u.id = ul.user_id
-              WHERE ul.item_id = ?
-              ORDER BY ul.created_at DESC
-              LIMIT 100`,
-        args: [itemId],
-      }),
-    ])
+    const photos = await db.execute({
+      sql: 'SELECT * FROM item_photos WHERE item_id = ? ORDER BY created_at ASC',
+      args: [itemId],
+    })
 
-    res.json({ item: result.rows[0], photos: photos.rows, logs: logs.rows })
+    res.json({ item: result.rows[0], photos: photos.rows })
   } catch (err) {
     console.error('get item:', err)
     res.status(500).json({ error: 'Server error' })
@@ -215,50 +204,6 @@ router.delete('/:itemId', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/inventories/:inventoryId/items/:itemId/use — log a use or restock
-router.post('/:itemId/use', requireAuth, async (req, res) => {
-  const { inventoryId, itemId } = req.params as Record<string, string>
-  const role = await getMemberRole(inventoryId, req.user!.id)
-  if (!role || role === 'viewer') return res.status(403).json({ error: 'Permission denied' })
-
-  const { amount, direction, note } = req.body
-  if (!amount || !['used', 'restocked'].includes(direction)) {
-    return res.status(400).json({ error: 'amount and direction (used|restocked) are required' })
-  }
-
-  try {
-    const itemResult = await db.execute({
-      sql: 'SELECT quantity FROM items WHERE id = ? AND inventory_id = ?',
-      args: [itemId, inventoryId],
-    })
-    if (!itemResult.rows[0]) return res.status(404).json({ error: 'Item not found' })
-
-    const current = Number(itemResult.rows[0].quantity)
-    const delta = direction === 'used' ? -Math.abs(Number(amount)) : Math.abs(Number(amount))
-    const newQty = Math.max(0, current + delta)
-    const logId = randomUUID()
-
-    await db.batch([
-      {
-        sql: 'UPDATE items SET quantity = ?, updated_at = unixepoch() WHERE id = ?',
-        args: [newQty, itemId],
-      },
-      {
-        sql: `INSERT INTO usage_logs (id, item_id, user_id, direction, amount, quantity_after, note)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [logId, itemId, req.user!.id, direction, Math.abs(Number(amount)), newQty, note || null],
-      },
-    ])
-
-    res.json({
-      quantity: newQty,
-      log: { id: logId, direction, amount: Math.abs(Number(amount)), quantity_after: newQty },
-    })
-  } catch (err) {
-    console.error('log use:', err)
-    res.status(500).json({ error: 'Server error' })
-  }
-})
 
 // POST /api/inventories/:inventoryId/items/:itemId/photos
 router.post('/:itemId/photos', requireAuth, upload.single('photo'), async (req, res) => {

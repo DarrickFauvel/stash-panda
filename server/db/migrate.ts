@@ -124,6 +124,9 @@ try {
   await db.execute('ALTER TABLE inventory_members ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
 } catch { /* column already exists */ }
 try {
+  await db.execute('ALTER TABLE inventories ADD COLUMN subtitle TEXT')
+} catch { /* column already exists */ }
+try {
   await db.execute("ALTER TABLE locations ADD COLUMN location_type TEXT NOT NULL DEFAULT 'room'")
 } catch { /* column already exists */ }
 

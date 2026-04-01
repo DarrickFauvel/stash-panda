@@ -4,7 +4,7 @@
  * Usage:
  *   <quantity-stepper>
  *     <button type="button" data-action="decrement">−</button>
- *     <input type="number" value="1" min="0" step="any">
+ *     <input type="number" value="1" min="0" step="1">
  *     <button type="button" data-action="increment">+</button>
  *   </quantity-stepper>
  *
@@ -27,14 +27,14 @@ class QuantityStepper extends HTMLElement {
     const input = this.querySelector('input[type="number"]')
     if (!input) return
 
-    const step = Math.abs(Number(input.step) || 1)
+    const step = Math.abs(Math.round(Number(input.step)) || 1)
     const min = input.min !== '' ? Number(input.min) : -Infinity
-    const current = Number(input.value) || 0
+    const current = Math.round(Number(input.value) || 0)
 
     if (action === 'increment') {
-      input.value = +(current + step).toFixed(10)
+      input.value = current + step
     } else if (action === 'decrement') {
-      input.value = Math.max(min, +(current - step).toFixed(10))
+      input.value = Math.max(min, current - step)
     }
 
     input.dispatchEvent(new Event('change', { bubbles: true }))

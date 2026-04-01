@@ -20,7 +20,7 @@ router.use('/:inventoryId/items', itemsRouter)
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: `SELECT i.id, i.name, i.owner_id, im.role, im.position, i.created_at,
+      sql: `SELECT i.id, i.name, i.subtitle, i.owner_id, im.role, im.position, i.created_at,
                    (SELECT COUNT(*) FROM items WHERE inventory_id = i.id) AS item_count
             FROM inventories i
             JOIN inventory_members im ON im.inventory_id = i.id AND im.user_id = ?
@@ -56,15 +56,16 @@ router.patch('/reorder', requireAuth, async (req, res) => {
 
 // POST /api/inventories
 router.post('/', requireAuth, async (req, res) => {
-  const { name } = req.body
+  const { name, subtitle } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  const sub = subtitle?.trim() || null
 
   try {
     const id = randomUUID()
     await db.batch([
       {
-        sql: 'INSERT INTO inventories (id, name, owner_id) VALUES (?, ?, ?)',
-        args: [id, name.trim(), req.user!.id],
+        sql: 'INSERT INTO inventories (id, name, subtitle, owner_id) VALUES (?, ?, ?, ?)',
+        args: [id, name.trim(), sub, req.user!.id],
       },
       {
         sql: 'INSERT INTO inventory_members (inventory_id, user_id, role) VALUES (?, ?, ?)',
@@ -72,7 +73,7 @@ router.post('/', requireAuth, async (req, res) => {
       },
     ])
     res.status(201).json({
-      inventory: { id, name: name.trim(), owner_id: req.user!.id, role: 'owner', item_count: 0 },
+      inventory: { id, name: name.trim(), subtitle: sub, owner_id: req.user!.id, role: 'owner', item_count: 0 },
     })
   } catch (err) {
     console.error('create inventory:', err)
@@ -85,7 +86,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
     const result = await db.execute({
-      sql: `SELECT i.id, i.name, i.owner_id, im.role, i.created_at,
+      sql: `SELECT i.id, i.name, i.subtitle, i.owner_id, im.role, i.created_at,
                    (SELECT COUNT(*) FROM items WHERE inventory_id = i.id) AS item_count
             FROM inventories i
             JOIN inventory_members im ON im.inventory_id = i.id AND im.user_id = ?
@@ -102,8 +103,9 @@ router.get('/:id', requireAuth, async (req, res) => {
 // PATCH /api/inventories/:id
 router.patch('/:id', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
-  const { name } = req.body
+  const { name, subtitle } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  const sub = subtitle?.trim() || null
 
   try {
     const member = await db.execute({
@@ -113,10 +115,10 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (!member.rows[0]) return res.status(403).json({ error: 'Only the owner can rename this inventory' })
 
     await db.execute({
-      sql: 'UPDATE inventories SET name = ?, updated_at = unixepoch() WHERE id = ?',
-      args: [name.trim(), id],
+      sql: 'UPDATE inventories SET name = ?, subtitle = ?, updated_at = unixepoch() WHERE id = ?',
+      args: [name.trim(), sub, id],
     })
-    res.json({ inventory: { id, name: name.trim() } })
+    res.json({ inventory: { id, name: name.trim(), subtitle: sub } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
