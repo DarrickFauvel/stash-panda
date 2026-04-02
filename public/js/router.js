@@ -1339,9 +1339,23 @@ async function routeItemNew(matches) {
         <div class="card-body">
           <div id="form-error" role="alert"></div>
           <form id="new-item-form">
+
+            <div class="field">
+              <label for="barcode-input">Barcode</label>
+              <div style="display:flex;gap:var(--space-2)">
+                <input type="text" id="barcode-input" inputmode="numeric" placeholder="Scan or type UPC…" autocomplete="off" style="flex:1">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-scan-barcode" hidden>📷 Scan</button>
+              </div>
+              <div id="scan-preview" hidden style="margin-top:var(--space-2)">
+                <video id="scan-video" autoplay playsinline muted style="width:100%;border-radius:var(--radius);max-height:220px;background:#000;object-fit:cover;display:block"></video>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-scan-cancel" style="margin-top:var(--space-2)">Cancel</button>
+              </div>
+              <div id="barcode-status" class="text-sm mt-1" style="min-height:1.2em"></div>
+            </div>
+
             <div class="field">
               <label for="item-name">Name <span aria-hidden="true">*</span></label>
-              <input type="text" id="item-name" name="name" required autofocus>
+              <input type="text" id="item-name" name="name" required>
             </div>
             <div class="field">
               <label for="item-qty">Quantity</label>
@@ -1374,6 +1388,7 @@ async function routeItemNew(matches) {
                 <option value="subscription">Subscription</option>
                 <option value="document">Document</option>
               </select>
+              <p id="bg-type-hint" class="text-xs text-muted mt-1">Select <strong>Board Game</strong> to enter game-specific details.</p>
             </div>
 
             <div id="boardgame-fields" hidden>
@@ -1458,7 +1473,9 @@ async function routeItemNew(matches) {
   // ── Board game fields toggle + BGG URL parsing ───────────────────────────
   const bgFields = document.getElementById('boardgame-fields')
   document.getElementById('item-type').addEventListener('change', e => {
-    bgFields.hidden = e.target.value !== 'boardgame'
+    const isBoardGame = e.target.value === 'boardgame'
+    bgFields.hidden = !isBoardGame
+    document.getElementById('bg-type-hint').hidden = isBoardGame
   })
 
   document.getElementById('bg-url').addEventListener('input', e => {
@@ -1467,6 +1484,102 @@ async function routeItemNew(matches) {
     if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
     else { display.hidden = true }
   })
+
+  // ── Barcode scanning & lookup ─────────────────────────────────────────────
+  let productImageUrl = null
+
+  const barcodeInput  = document.getElementById('barcode-input')
+  const scanBtn       = document.getElementById('btn-scan-barcode')
+  const scanPreview   = document.getElementById('scan-preview')
+  const scanVideo     = document.getElementById('scan-video')
+  const scanCancelBtn = document.getElementById('btn-scan-cancel')
+  const barcodeStatus = document.getElementById('barcode-status')
+
+  if ('BarcodeDetector' in window) scanBtn.hidden = false
+
+  let mediaStream = null
+  let scanRaf = null
+
+  function stopCamera() {
+    if (scanRaf) { cancelAnimationFrame(scanRaf); scanRaf = null }
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null }
+    scanPreview.hidden = true
+    scanVideo.srcObject = null
+  }
+
+  async function startCamera() {
+    barcodeStatus.textContent = 'Starting camera…'
+    barcodeStatus.style.color = ''
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      scanVideo.srcObject = mediaStream
+      scanPreview.hidden = false
+      barcodeStatus.textContent = 'Point camera at barcode…'
+
+      const detector = new BarcodeDetector({
+        formats: ['upc_a', 'upc_e', 'ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'codabar'],
+      })
+
+      async function tick() {
+        if (!mediaStream) return
+        try {
+          const results = await detector.detect(scanVideo)
+          if (results.length) {
+            const upc = results[0].rawValue
+            stopCamera()
+            barcodeInput.value = upc
+            await lookupBarcode(upc)
+            return
+          }
+        } catch {}
+        scanRaf = requestAnimationFrame(tick)
+      }
+      scanRaf = requestAnimationFrame(tick)
+    } catch {
+      barcodeStatus.textContent = 'Camera access denied'
+      barcodeStatus.style.color = 'var(--c-danger)'
+      stopCamera()
+    }
+  }
+
+  scanBtn.addEventListener('click', startCamera)
+  scanCancelBtn.addEventListener('click', () => { stopCamera(); barcodeStatus.textContent = '' })
+
+  // USB / Bluetooth keyboard-wedge scanners emit the barcode then Enter
+  barcodeInput.addEventListener('keydown', async e => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const upc = barcodeInput.value.trim()
+      if (upc) await lookupBarcode(upc)
+    }
+  })
+
+  async function lookupBarcode(upc) {
+    barcodeStatus.textContent = 'Looking up product…'
+    barcodeStatus.style.color = ''
+    try {
+      const data = await api('GET', `/barcode/${upc}`)
+      if (!data) return
+      const nameEl = document.getElementById('item-name')
+      const descEl = document.getElementById('item-desc')
+      const typeEl = document.getElementById('item-type')
+      if (data.name) nameEl.value = data.name
+      if (data.description) descEl.value = data.description
+      if (data.imageUrl) productImageUrl = data.imageUrl
+      if (data.itemType && typeEl) {
+        const isBoardGame = data.itemType === 'boardgame'
+        typeEl.value = data.itemType
+        document.getElementById('boardgame-fields').hidden = !isBoardGame
+        document.getElementById('bg-type-hint').hidden = isBoardGame
+      }
+      barcodeStatus.textContent = data.name ? `✓ Found: ${data.name}` : '✓ Product found'
+      barcodeStatus.style.color = 'var(--c-brand)'
+      nameEl.focus()
+    } catch (err) {
+      barcodeStatus.textContent = err.message ?? 'Lookup failed'
+      barcodeStatus.style.color = 'var(--c-danger)'
+    }
+  }
 
   // ── Submit ────────────────────────────────────────────────────────────────
   document.getElementById('new-item-form').addEventListener('submit', async e => {
@@ -1509,7 +1622,12 @@ async function routeItemNew(matches) {
         description: e.target.description.value || undefined,
         custom_fields: Object.keys(customFields).length ? customFields : undefined,
       })
-      if (data) navigate(`/inventories/${inventoryId}/items/${data.item.id}`)
+      if (data) {
+        if (productImageUrl) {
+          try { await api('POST', `/inventories/${inventoryId}/items/${data.item.id}/photos/url`, { url: productImageUrl }) } catch {}
+        }
+        navigate(`/inventories/${inventoryId}/items/${data.item.id}`)
+      }
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
       btn.disabled = false
@@ -1990,7 +2108,9 @@ async function routeItemEdit(matches) {
   const catOptions = `<option value="">— None —</option>` +
     categories.map(c => `<option value="${c.id}" ${item.category_id === c.id ? 'selected' : ''}>${escapeHTML(c.name)}</option>`).join('')
 
-  const isBG = item.item_type === 'boardgame'
+  const bgDataKeys = ['year_published','min_players','max_players','playing_time_min','min_age','publisher','designer','box_dimensions','weight','bgg_id']
+  const hasBgData = bgDataKeys.some(k => cf[k] != null)
+  const isBG = item.item_type === 'boardgame' || hasBgData
 
   setHTML(`
     <div>
@@ -2036,6 +2156,7 @@ async function routeItemEdit(matches) {
                 <option value="subscription" ${item.item_type === 'subscription' ? 'selected' : ''}>Subscription</option>
                 <option value="document" ${item.item_type === 'document' ? 'selected' : ''}>Document</option>
               </select>
+              <p id="bg-type-hint" class="text-xs text-muted mt-1" ${isBG ? 'hidden' : ''}>Select <strong>Board Game</strong> to enter game-specific details.</p>
             </div>
 
             <div id="boardgame-fields" ${isBG ? '' : 'hidden'}>
@@ -2118,7 +2239,9 @@ async function routeItemEdit(matches) {
   `)
 
   document.getElementById('item-type').addEventListener('change', e => {
-    document.getElementById('boardgame-fields').hidden = e.target.value !== 'boardgame'
+    const isBoardGame = e.target.value === 'boardgame'
+    document.getElementById('boardgame-fields').hidden = !isBoardGame
+    document.getElementById('bg-type-hint').hidden = isBoardGame
   })
 
   document.getElementById('bg-url').addEventListener('input', e => {
