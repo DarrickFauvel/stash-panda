@@ -1573,14 +1573,14 @@ async function routeItem(matches) {
     const w = cf.weight
     const weightStr = w ? `${w.value}${w.unit ? ' ' + w.unit : ''}` : null
     const bggFields = [
-      cf.year_published ? ['Published', cf.year_published] : null,
-      cf.min_players != null && cf.max_players != null ? ['Players', `${cf.min_players}–${cf.max_players}`] : null,
-      cf.playing_time_min ? ['Play time', `~${cf.playing_time_min} min`] : null,
-      cf.min_age ? ['Min age', `${cf.min_age}+`] : null,
-      cf.publisher ? ['Publisher', escapeHTML(cf.publisher)] : null,
-      cf.designer ? ['Designer', escapeHTML(cf.designer)] : null,
-      dimStr ? ['Box size', escapeHTML(dimStr)] : null,
-      weightStr ? ['Weight', escapeHTML(weightStr)] : null,
+      cf.year_published != null    ? ['Published', String(cf.year_published), 'year_published'] : null,
+      (cf.min_players != null || cf.max_players != null) ? ['Players', `${cf.min_players ?? '?'}–${cf.max_players ?? '?'}`, 'players'] : null,
+      cf.playing_time_min != null  ? ['Play time', `~${cf.playing_time_min} min`, 'playing_time_min'] : null,
+      cf.min_age != null           ? ['Min age', `${cf.min_age}+`, 'min_age'] : null,
+      cf.publisher                 ? ['Publisher', escapeHTML(cf.publisher), 'publisher'] : null,
+      cf.designer                  ? ['Designer', escapeHTML(cf.designer), 'designer'] : null,
+      dimStr                       ? ['Box size', escapeHTML(dimStr), 'box_dimensions'] : null,
+      weightStr                    ? ['Weight', escapeHTML(weightStr), 'weight'] : null,
     ].filter(Boolean)
 
     setHTML(`
@@ -1592,20 +1592,26 @@ async function routeItem(matches) {
               <button class="btn btn-ghost btn-sm" id="btn-delete" style="color:var(--c-danger)">Delete</button>
             </div>
           </div>
-          <h1 class="page-title mt-4">${escapeHTML(item.name)}</h1>
+          <h1 class="page-title mt-4 inline-editable" id="item-title" title="Click to edit">${escapeHTML(item.name)}</h1>
           ${item.category_name ? `<p class="page-subtitle">${escapeHTML(item.category_name)}</p>` : ''}
         </div>
 
         ${heroPhoto ? `<img src="${heroPhoto.url}" alt="${escapeHTML(item.name)}" class="item-hero-photo">` : ''}
 
-        ${item.description ? `<div class="card mb-4"><div class="card-body text-sm" style="white-space:pre-wrap">${escapeHTML(item.description)}</div></div>` : ''}
+        <div class="card mb-4">
+          <div class="card-body text-sm inline-editable" id="item-desc-body" title="Click to edit">
+            ${item.description
+              ? `<span class="inline-desc-text" style="white-space:pre-wrap">${escapeHTML(item.description)}</span>`
+              : `<span class="inline-desc-placeholder text-muted">Add a description…</span>`}
+          </div>
+        </div>
 
         ${bggFields.length ? `
         <div class="card mb-4">
           <div class="card-header"><h2 class="section-title" style="margin:0">🎲 Board Game Info</h2></div>
           <div class="card-body">
             <dl class="bgg-info-grid">
-              ${bggFields.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}
+              ${bggFields.map(([k, v, f]) => `<dt>${k}</dt><dd class="inline-editable" data-bg-field="${f}" title="Click to edit">${v}</dd>`).join('')}
             </dl>
           </div>
         </div>` : ''}
@@ -1613,8 +1619,8 @@ async function routeItem(matches) {
         <div class="card mb-4">
           <div class="card-body">
             <div class="text-xs text-muted font-medium mb-1" style="text-transform:uppercase;letter-spacing:.05em">Quantity</div>
-            <div style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2">
-              ${item.quantity}${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
+            <div class="inline-editable" id="item-qty-row" title="Click to edit" style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2;display:inline-block">
+              <span id="item-qty-val">${item.quantity}</span>${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
             </div>
           </div>
         </div>
@@ -1699,6 +1705,242 @@ async function routeItem(matches) {
       } catch (err) {
         alert(err.message)
       }
+    })
+
+    // ---- Inline editing ----
+    async function patchField(field, value) {
+      await api('PATCH', `/inventories/${inventoryId}/items/${itemId}`, { [field]: value })
+    }
+
+    // Tab flow: commit current field and activate next/prev .inline-editable in DOM order
+    function tabToNext(currentEditable, reverse = false) {
+      const editables = [...document.querySelectorAll('.inline-editable')]
+      const idx = editables.indexOf(currentEditable)
+      const next = editables[reverse ? idx - 1 : idx + 1]
+      if (next) next.click()
+    }
+
+    // Name
+    const titleEl = document.getElementById('item-title')
+    titleEl.addEventListener('click', () => {
+      const orig = item.name
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.value = orig
+      input.className = 'inline-edit-input inline-edit-input--title'
+      titleEl.replaceWith(input)
+      input.focus(); input.select()
+      let done = false
+      async function commit() {
+        if (done) return; done = true
+        const val = input.value.trim()
+        if (!val || val === orig) { input.replaceWith(titleEl); return }
+        item.name = val; titleEl.textContent = val; input.replaceWith(titleEl)
+        try { await patchField('name', val) }
+        catch (err) { alert(err.message); item.name = orig; titleEl.textContent = orig }
+      }
+      function cancel() { if (done) return; done = true; input.replaceWith(titleEl) }
+      input.addEventListener('blur', commit)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit() }
+        if (e.key === 'Escape') { input.removeEventListener('blur', commit); cancel() }
+        if (e.key === 'Tab') { e.preventDefault(); commit(); tabToNext(titleEl, e.shiftKey) }
+      })
+    })
+
+    // Description
+    const descBodyEl = document.getElementById('item-desc-body')
+    function renderDescContent(text) {
+      descBodyEl.innerHTML = text
+        ? `<span class="inline-desc-text" style="white-space:pre-wrap">${escapeHTML(text)}</span>`
+        : `<span class="inline-desc-placeholder text-muted">Add a description…</span>`
+    }
+    descBodyEl.addEventListener('click', () => {
+      if (descBodyEl.querySelector('textarea')) return
+      const orig = item.description ?? ''
+      const textarea = document.createElement('textarea')
+      textarea.value = orig
+      textarea.className = 'inline-edit-input'
+      textarea.rows = Math.max(3, orig.split('\n').length + 1)
+      descBodyEl.innerHTML = ''
+      descBodyEl.appendChild(textarea)
+      textarea.focus()
+      let done = false
+      async function commit() {
+        if (done) return; done = true
+        const val = textarea.value.trim()
+        item.description = val || null; renderDescContent(item.description)
+        if (val !== orig) {
+          try { await patchField('description', item.description) }
+          catch (err) { alert(err.message); item.description = orig || null; renderDescContent(item.description) }
+        }
+      }
+      function cancel() { if (done) return; done = true; renderDescContent(orig) }
+      textarea.addEventListener('blur', commit)
+      textarea.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { textarea.removeEventListener('blur', commit); cancel() }
+        if (e.key === 'Tab') { e.preventDefault(); commit(); tabToNext(descBodyEl, e.shiftKey) }
+      })
+    })
+
+    // Quantity
+    const qtyRowEl = document.getElementById('item-qty-row')
+    const qtyValEl = document.getElementById('item-qty-val')
+    qtyRowEl.addEventListener('click', () => {
+      if (qtyRowEl.querySelector('input')) return
+      const orig = item.quantity
+      const input = document.createElement('input')
+      input.type = 'number'; input.value = orig; input.min = '0'; input.step = '1'
+      input.className = 'inline-edit-input inline-edit-input--qty'
+      qtyValEl.replaceWith(input)
+      input.focus(); input.select()
+      let done = false
+      async function commit() {
+        if (done) return; done = true
+        const val = Math.max(0, Math.round(Number(input.value) || 0))
+        item.quantity = val; qtyValEl.textContent = val; input.replaceWith(qtyValEl)
+        if (val !== orig) {
+          try { await patchField('quantity', val) }
+          catch (err) { alert(err.message); item.quantity = orig; qtyValEl.textContent = orig }
+        }
+      }
+      function cancel() { if (done) return; done = true; input.replaceWith(qtyValEl) }
+      input.addEventListener('blur', commit)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit() }
+        if (e.key === 'Escape') { input.removeEventListener('blur', commit); cancel() }
+        if (e.key === 'Tab') { e.preventDefault(); commit(); tabToNext(qtyRowEl, e.shiftKey) }
+      })
+    })
+
+    // BGG fields
+    function bgFieldDisplay(field) {
+      if (field === 'year_published')   return cf.year_published != null ? String(cf.year_published) : ''
+      if (field === 'playing_time_min') return cf.playing_time_min != null ? `~${cf.playing_time_min} min` : ''
+      if (field === 'min_age')          return cf.min_age != null ? `${cf.min_age}+` : ''
+      if (field === 'publisher')        return cf.publisher ?? ''
+      if (field === 'designer')         return cf.designer ?? ''
+      if (field === 'players') {
+        const mn = cf.min_players, mx = cf.max_players
+        return (mn != null || mx != null) ? `${mn ?? '?'}–${mx ?? '?'}` : ''
+      }
+      if (field === 'box_dimensions') {
+        const bd = cf.box_dimensions
+        return bd ? [bd.l, bd.w, bd.h].filter(Boolean).join(' × ') + (bd.unit ? ` ${bd.unit}` : '') : ''
+      }
+      if (field === 'weight') {
+        const wt = cf.weight
+        return wt ? `${wt.value}${wt.unit ? ' ' + wt.unit : ''}` : ''
+      }
+      return ''
+    }
+
+    document.querySelectorAll('[data-bg-field]').forEach(dd => {
+      dd.addEventListener('click', () => {
+        if (dd.querySelector('input,select')) return
+        const field = dd.dataset.bgField
+        const origDisplay = dd.innerHTML
+        const allInputs = []
+
+        function num(val, opts = {}) {
+          const el = document.createElement('input')
+          el.type = 'number'; el.value = val ?? ''; el.className = 'inline-edit-input'
+          el.style.width = opts.width ?? '5rem'; el.min = opts.min ?? '0'
+          if (opts.step) el.step = opts.step
+          if (opts.placeholder) el.placeholder = opts.placeholder
+          allInputs.push(el); return el
+        }
+        function txt(val) {
+          const el = document.createElement('input')
+          el.type = 'text'; el.value = val ?? ''; el.className = 'inline-edit-input'
+          allInputs.push(el); return el
+        }
+        function sel(options, current) {
+          const el = document.createElement('select')
+          el.className = 'inline-edit-input'; el.style.width = 'auto'
+          options.forEach(([v, l]) => {
+            const o = document.createElement('option')
+            o.value = v; o.textContent = l; if (v === current) o.selected = true
+            el.appendChild(o)
+          })
+          allInputs.push(el); return el
+        }
+        function span(text) {
+          const s = document.createElement('span'); s.textContent = text; s.style.padding = '0 2px'; return s
+        }
+
+        const wrap = document.createElement('div')
+        wrap.style.cssText = 'display:flex;gap:4px;align-items:center;flex-wrap:wrap'
+
+        if (field === 'year_published' || field === 'playing_time_min' || field === 'min_age') {
+          wrap.appendChild(num(cf[field], { width: '6rem' }))
+        } else if (field === 'publisher' || field === 'designer') {
+          wrap.appendChild(txt(cf[field]))
+        } else if (field === 'players') {
+          wrap.appendChild(num(cf.min_players, { width: '4rem', min: '1', placeholder: 'min' }))
+          wrap.appendChild(span('–'))
+          wrap.appendChild(num(cf.max_players, { width: '4rem', min: '1', placeholder: 'max' }))
+        } else if (field === 'box_dimensions') {
+          const bd = cf.box_dimensions ?? {}
+          wrap.appendChild(num(bd.l, { width: '4rem', step: 'any', placeholder: 'L' }))
+          wrap.appendChild(span('×'))
+          wrap.appendChild(num(bd.w, { width: '4rem', step: 'any', placeholder: 'W' }))
+          wrap.appendChild(span('×'))
+          wrap.appendChild(num(bd.h, { width: '4rem', step: 'any', placeholder: 'H' }))
+          wrap.appendChild(sel([['cm','cm'],['in','in']], cf.box_dimensions?.unit ?? 'cm'))
+        } else if (field === 'weight') {
+          const wt = cf.weight ?? {}
+          wrap.appendChild(num(wt.value, { width: '5rem', step: 'any' }))
+          wrap.appendChild(sel([['kg','kg'],['lb','lb'],['g','g']], wt.unit ?? 'kg'))
+        }
+
+        dd.innerHTML = ''; dd.appendChild(wrap)
+        if (allInputs[0]) allInputs[0].focus()
+
+        let done = false
+        async function commit() {
+          if (done) return; done = true
+          const n = i => { const v = Number(allInputs[i]?.value); return isNaN(v) || !allInputs[i]?.value ? undefined : v }
+          const s = i => allInputs[i]?.value.trim() || undefined
+
+          if (field === 'year_published')        cf.year_published   = n(0)
+          else if (field === 'playing_time_min') cf.playing_time_min = n(0)
+          else if (field === 'min_age')          cf.min_age          = n(0)
+          else if (field === 'publisher')        cf.publisher        = s(0)
+          else if (field === 'designer')         cf.designer         = s(0)
+          else if (field === 'players')          { cf.min_players = n(0); cf.max_players = n(1) }
+          else if (field === 'box_dimensions') {
+            const l = n(0), w = n(1), h = n(2), unit = allInputs[3]?.value
+            cf.box_dimensions = (l || w || h) ? { l, w, h, unit } : undefined
+          } else if (field === 'weight') {
+            const val = n(0), unit = allInputs[1]?.value
+            cf.weight = val ? { value: val, unit } : undefined
+          }
+
+          dd.innerHTML = bgFieldDisplay(field)
+          try { await patchField('custom_fields', cf) }
+          catch (err) { alert(err.message); dd.innerHTML = origDisplay }
+        }
+        function cancel() { if (done) return; done = true; dd.innerHTML = origDisplay }
+
+        wrap.addEventListener('focusout', e => {
+          if (wrap.contains(e.relatedTarget)) return
+          commit()
+        })
+        allInputs.forEach((el, i) => {
+          el.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit() }
+            if (e.key === 'Escape') cancel()
+            if (e.key === 'Tab') {
+              const isFirst = i === 0
+              const isLast = i === allInputs.length - 1
+              if (!e.shiftKey && isLast) { e.preventDefault(); commit(); tabToNext(dd, false) }
+              else if (e.shiftKey && isFirst) { e.preventDefault(); commit(); tabToNext(dd, true) }
+              // otherwise let Tab flow naturally between inputs within the compound field
+            }
+          })
+        })
+      })
     })
 
   } catch (err) {

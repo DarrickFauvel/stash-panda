@@ -1206,6 +1206,39 @@ quantity-stepper input[type="number"] {
 
 .photo-gallery__add-icon { font-size: 1.5rem; }
 
+/* Inline editing */
+.inline-editable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s;
+}
+.inline-editable:hover {
+  background: var(--c-surface-raised);
+}
+.inline-edit-input {
+  background: var(--c-surface-raised);
+  border: 1.5px solid var(--c-brand);
+  border-radius: var(--radius-sm);
+  color: var(--c-text);
+  padding: var(--space-1) var(--space-2);
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: inherit;
+}
+.inline-edit-input:focus { outline: none; box-shadow: 0 0 0 3px var(--c-brand-light); }
+.inline-edit-input--title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+}
+.inline-edit-input--qty {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  color: var(--c-brand);
+  width: 7rem;
+}
+.inline-desc-placeholder { font-style: italic; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --c-bg:             #0f1410;
