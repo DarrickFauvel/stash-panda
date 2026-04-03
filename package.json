@@ -4,7 +4,7 @@
   "description": "Inventory tracking for things you actually care about",
   "type": "module",
   "scripts": {
-    "start": "node server/index.ts",
+    "start": "node server/db/migrate.ts && node server/index.ts",
     "dev": "node --watch server/index.ts",
     "migrate": "node server/db/migrate.ts",
     "typecheck": "tsc --noEmit"
