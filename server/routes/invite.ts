@@ -26,7 +26,7 @@ router.get('/:token', async (req, res) => {
       token,
       role,
       email,
-      inventory: { id: inventory_id, name: inventory_name },
+      galaxy: { id: inventory_id, name: inventory_name },
       invited_by_name,
     })
   } catch (err) {
@@ -59,7 +59,7 @@ router.post('/:token/accept', requireAuth, async (req, res) => {
         sql: 'UPDATE invite_tokens SET used_at = unixepoch() WHERE token = ?',
         args: [token],
       })
-      return res.json({ inventory_id: invite.inventory_id, already_member: true })
+      return res.json({ galaxy_id: invite.inventory_id, already_member: true })
     }
 
     await db.batch([
@@ -73,7 +73,7 @@ router.post('/:token/accept', requireAuth, async (req, res) => {
       },
     ])
 
-    res.json({ inventory_id: invite.inventory_id, role: invite.role })
+    res.json({ galaxy_id: invite.inventory_id, role: invite.role })
   } catch (err) {
     console.error('accept invite:', err)
     res.status(500).json({ error: 'Server error' })

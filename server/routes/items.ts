@@ -19,7 +19,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
 })
 
-// mergeParams: true so :inventoryId is accessible from the parent router
+// mergeParams: true — :inventoryId is accessible from the parent router
 const router = Router({ mergeParams: true })
 
 async function getMemberRole(inventoryId: string, userId: string): Promise<string | null> {
@@ -30,7 +30,7 @@ async function getMemberRole(inventoryId: string, userId: string): Promise<strin
   return result.rows[0]?.role as string ?? null
 }
 
-// GET /api/inventories/:inventoryId/items
+// GET /api/galaxies/:inventoryId/items
 router.get('/', requireAuth, async (req, res) => {
   const { inventoryId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -81,7 +81,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/inventories/:inventoryId/items
+// POST /api/galaxies/:inventoryId/items
 router.post('/', requireAuth, async (req, res) => {
   const { inventoryId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -119,7 +119,7 @@ router.post('/', requireAuth, async (req, res) => {
   }
 })
 
-// GET /api/inventories/:inventoryId/items/:itemId
+// GET /api/galaxies/:inventoryId/items/:itemId
 router.get('/:itemId', requireAuth, async (req, res) => {
   const { inventoryId, itemId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -148,7 +148,7 @@ router.get('/:itemId', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/inventories/:inventoryId/items/:itemId
+// PATCH /api/galaxies/:inventoryId/items/:itemId
 router.patch('/:itemId', requireAuth, async (req, res) => {
   const { inventoryId, itemId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -187,7 +187,7 @@ router.patch('/:itemId', requireAuth, async (req, res) => {
   }
 })
 
-// DELETE /api/inventories/:inventoryId/items/:itemId
+// DELETE /api/galaxies/:inventoryId/items/:itemId
 router.delete('/:itemId', requireAuth, async (req, res) => {
   const { inventoryId, itemId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -205,7 +205,7 @@ router.delete('/:itemId', requireAuth, async (req, res) => {
 })
 
 
-// POST /api/inventories/:inventoryId/items/:itemId/photos
+// POST /api/galaxies/:inventoryId/items/:itemId/photos
 router.post('/:itemId/photos', requireAuth, upload.single('photo'), async (req, res) => {
   const { inventoryId, itemId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -227,7 +227,7 @@ router.post('/:itemId/photos', requireAuth, upload.single('photo'), async (req, 
   }
 })
 
-// POST /api/inventories/:inventoryId/items/:itemId/photos/url
+// POST /api/galaxies/:inventoryId/items/:itemId/photos/url
 router.post('/:itemId/photos/url', requireAuth, async (req, res) => {
   const { inventoryId, itemId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)
@@ -255,7 +255,7 @@ router.post('/:itemId/photos/url', requireAuth, async (req, res) => {
   }
 })
 
-// DELETE /api/inventories/:inventoryId/items/:itemId/photos/:photoId
+// DELETE /api/galaxies/:inventoryId/items/:itemId/photos/:photoId
 router.delete('/:itemId/photos/:photoId', requireAuth, async (req, res) => {
   const { inventoryId, itemId, photoId } = req.params as Record<string, string>
   const role = await getMemberRole(inventoryId, req.user!.id)

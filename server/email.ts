@@ -69,17 +69,17 @@ export async function sendPasswordResetEmail(to: string, token: string) {
 export async function sendInviteEmail(
   to: string,
   inviterName: string,
-  inventoryName: string,
+  galaxyName: string,
   role: string,
   token: string,
 ) {
   const link = `${APP_URL}/invite/${token}`
   await send({
     to,
-    subject: `${inviterName} invited you to "${inventoryName}" on Pocket Universe`,
-    text: `${inviterName} has invited you to join "${inventoryName}" as a${role === 'editor' ? 'n' : ''} ${role}.\n\nAccept the invite here:\n\n${link}\n\nThis invite expires in 7 days.\n\n— Pocket Universe`,
+    subject: `${inviterName} invited you to "${galaxyName}" on Pocket Universe`,
+    text: `${inviterName} has invited you to join "${galaxyName}" as a${role === 'editor' ? 'n' : ''} ${role}.\n\nAccept the invite here:\n\n${link}\n\nThis invite expires in 7 days.\n\n— Pocket Universe`,
     html: `
-      <p>${inviterName} has invited you to join <strong>${inventoryName}</strong> as a${role === 'editor' ? 'n' : ''} <strong>${role}</strong>.</p>
+      <p>${inviterName} has invited you to join <strong>${galaxyName}</strong> as a${role === 'editor' ? 'n' : ''} <strong>${role}</strong>.</p>
       <p><a href="${link}" style="background:#2d6a4f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Accept Invite</a></p>
       <p>Or copy this link: ${link}</p>
       <p>This invite expires in 7 days.</p>

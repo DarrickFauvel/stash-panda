@@ -915,7 +915,7 @@ quantity-stepper input[type="number"] {
 
 /* ── Inventory drag-to-reorder ──────────────────────────────────── */
 
-.inv-row {
+.galaxy-row {
   display: flex;
   align-items: center;
   gap: 0;
@@ -923,7 +923,7 @@ quantity-stepper input[type="number"] {
   user-select: none;
 }
 
-.inv-row__link {
+.galaxy-row__link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -948,11 +948,11 @@ quantity-stepper input[type="number"] {
 
 .drag-handle:active { cursor: grabbing; }
 
-.inv-row--dragging {
+.galaxy-row--dragging {
   opacity: 0.4;
 }
 
-.inv-row--drag-over {
+.galaxy-row--drag-over {
   outline: 2px solid var(--c-brand);
   outline-offset: -2px;
   border-radius: var(--radius);

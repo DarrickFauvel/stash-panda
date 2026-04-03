@@ -13,10 +13,10 @@ router.use((req, _res, next) => {
   next()
 })
 
-// Items are nested: /api/inventories/:inventoryId/items
+// Items are nested: /api/galaxies/:inventoryId/items
 router.use('/:inventoryId/items', itemsRouter)
 
-// GET /api/inventories
+// GET /api/galaxies
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
@@ -27,14 +27,14 @@ router.get('/', requireAuth, async (req, res) => {
             ORDER BY im.position ASC, i.name ASC`,
       args: [req.user!.id],
     })
-    res.json({ inventories: result.rows })
+    res.json({ galaxies: result.rows })
   } catch (err) {
-    console.error('list inventories:', err)
+    console.error('list galaxies:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// PATCH /api/inventories/reorder
+// PATCH /api/galaxies/reorder
 router.patch('/reorder', requireAuth, async (req, res) => {
   const { order } = req.body
   if (!Array.isArray(order) || order.some(id => typeof id !== 'string')) {
@@ -49,12 +49,12 @@ router.patch('/reorder', requireAuth, async (req, res) => {
     )
     res.json({ ok: true })
   } catch (err) {
-    console.error('reorder inventories:', err)
+    console.error('reorder galaxies:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// POST /api/inventories
+// POST /api/galaxies
 router.post('/', requireAuth, async (req, res) => {
   const { name, subtitle } = req.body
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
@@ -73,15 +73,15 @@ router.post('/', requireAuth, async (req, res) => {
       },
     ])
     res.status(201).json({
-      inventory: { id, name: name.trim(), subtitle: sub, owner_id: req.user!.id, role: 'owner', item_count: 0 },
+      galaxy: { id, name: name.trim(), subtitle: sub, owner_id: req.user!.id, role: 'owner', item_count: 0 },
     })
   } catch (err) {
-    console.error('create inventory:', err)
+    console.error('create galaxy:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// GET /api/inventories/:id
+// GET /api/galaxies/:id
 router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
@@ -93,14 +93,14 @@ router.get('/:id', requireAuth, async (req, res) => {
             WHERE i.id = ?`,
       args: [req.user!.id, id],
     })
-    if (!result.rows[0]) return res.status(404).json({ error: 'Inventory not found' })
-    res.json({ inventory: result.rows[0] })
+    if (!result.rows[0]) return res.status(404).json({ error: 'Galaxy not found' })
+    res.json({ galaxy: result.rows[0] })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// PATCH /api/inventories/:id
+// PATCH /api/galaxies/:id
 router.patch('/:id', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   const { name, subtitle } = req.body
@@ -112,19 +112,19 @@ router.patch('/:id', requireAuth, async (req, res) => {
       sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role = 'owner'",
       args: [id, req.user!.id],
     })
-    if (!member.rows[0]) return res.status(403).json({ error: 'Only the owner can rename this inventory' })
+    if (!member.rows[0]) return res.status(403).json({ error: 'Only the owner can rename this galaxy' })
 
     await db.execute({
       sql: 'UPDATE inventories SET name = ?, subtitle = ?, updated_at = unixepoch() WHERE id = ?',
       args: [name.trim(), sub, id],
     })
-    res.json({ inventory: { id, name: name.trim(), subtitle: sub } })
+    res.json({ galaxy: { id, name: name.trim(), subtitle: sub } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }
 })
 
-// DELETE /api/inventories/:id
+// DELETE /api/galaxies/:id
 router.delete('/:id', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
@@ -132,7 +132,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
       sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role = 'owner'",
       args: [id, req.user!.id],
     })
-    if (!member.rows[0]) return res.status(403).json({ error: 'Only the owner can delete this inventory' })
+    if (!member.rows[0]) return res.status(403).json({ error: 'Only the owner can delete this galaxy' })
 
     await db.execute({ sql: 'DELETE FROM inventories WHERE id = ?', args: [id] })
     res.status(204).end()
@@ -141,7 +141,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 })
 
-// GET /api/inventories/:id/members
+// GET /api/galaxies/:id/members
 router.get('/:id/members', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
@@ -165,7 +165,7 @@ router.get('/:id/members', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/inventories/:id/members/:userId — change role
+// PATCH /api/galaxies/:id/members/:userId — change role
 router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
   const { id, userId } = req.params as Record<string, string>
   const { role } = req.body
@@ -192,7 +192,7 @@ router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
   }
 })
 
-// DELETE /api/inventories/:id/members/:userId — remove member
+// DELETE /api/galaxies/:id/members/:userId — remove member
 router.delete('/:id/members/:userId', requireAuth, async (req, res) => {
   const { id, userId } = req.params as Record<string, string>
   try {
@@ -220,7 +220,7 @@ router.delete('/:id/members/:userId', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/inventories/:id/invite
+// POST /api/galaxies/:id/invite
 router.post('/:id/invite', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   const { email, role = 'viewer' } = req.body
@@ -264,7 +264,7 @@ router.post('/:id/invite', requireAuth, async (req, res) => {
   }
 })
 
-// GET /api/inventories/:id/categories
+// GET /api/galaxies/:id/categories
 router.get('/:id/categories', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
@@ -284,7 +284,7 @@ router.get('/:id/categories', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/inventories/:id/categories
+// POST /api/galaxies/:id/categories
 router.post('/:id/categories', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   const { name } = req.body
@@ -308,7 +308,7 @@ router.post('/:id/categories', requireAuth, async (req, res) => {
   }
 })
 
-// GET /api/inventories/:id/locations
+// GET /api/galaxies/:id/locations
 router.get('/:id/locations', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   try {
@@ -335,7 +335,7 @@ router.get('/:id/locations', requireAuth, async (req, res) => {
 
 const VALID_LOCATION_TYPES = ['room','shelf','drawer','cabinet','closet','box','banker_box','shoebox','bin','basket','tote','bag','other']
 
-// POST /api/inventories/:id/locations
+// POST /api/galaxies/:id/locations
 router.post('/:id/locations', requireAuth, async (req, res) => {
   const { id } = req.params as Record<string, string>
   const { name, parent_id, location_type } = req.body
@@ -360,7 +360,7 @@ router.post('/:id/locations', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/inventories/:id/categories/:categoryId
+// PATCH /api/galaxies/:id/categories/:categoryId
 router.patch('/:id/categories/:categoryId', requireAuth, async (req, res) => {
   const { id, categoryId } = req.params as Record<string, string>
   const { name } = req.body
@@ -381,7 +381,7 @@ router.patch('/:id/categories/:categoryId', requireAuth, async (req, res) => {
   }
 })
 
-// DELETE /api/inventories/:id/categories/:categoryId
+// DELETE /api/galaxies/:id/categories/:categoryId
 router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
   const { id, categoryId } = req.params as Record<string, string>
   try {
@@ -397,7 +397,7 @@ router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
   }
 })
 
-// PATCH /api/inventories/:id/locations/:locationId
+// PATCH /api/galaxies/:id/locations/:locationId
 router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
   const { id, locationId } = req.params as Record<string, string>
   const { name, location_type } = req.body
@@ -422,7 +422,7 @@ router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
   }
 })
 
-// DELETE /api/inventories/:id/locations/:locationId
+// DELETE /api/galaxies/:id/locations/:locationId
 router.delete('/:id/locations/:locationId', requireAuth, async (req, res) => {
   const { id, locationId } = req.params as Record<string, string>
   try {

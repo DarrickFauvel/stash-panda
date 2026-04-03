@@ -100,21 +100,21 @@ const routes = [
   { pattern: /^\/$/, handler: routeHome },
   { pattern: /^\/login$/, handler: routeLogin },
   { pattern: /^\/signup$/, handler: routeSignup },
-  { pattern: /^\/inventories$/, handler: routeInventories },
-  { pattern: /^\/inventories\/new$/, handler: routeInventoryNew },
-  { pattern: /^\/inventories\/([^/]+)$/, handler: routeInventory },
-  { pattern: /^\/inventories\/([^/]+)\/locations$/, handler: routeLocations },
-  { pattern: /^\/inventories\/([^/]+)\/locations\/([^/]+)$/, handler: routeLocation },
-  { pattern: /^\/inventories\/([^/]+)\/items$/, handler: routeItems },
-  { pattern: /^\/inventories\/([^/]+)\/items\/new$/, handler: routeItemNew },
-  { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)\/edit$/, handler: routeItemEdit },
-  { pattern: /^\/inventories\/([^/]+)\/items\/([^/]+)$/, handler: routeItem },
+  { pattern: /^\/galaxies$/, handler: routeGalaxies },
+  { pattern: /^\/galaxies\/new$/, handler: routeGalaxyNew },
+  { pattern: /^\/galaxies\/([^/]+)$/, handler: routeGalaxy },
+  { pattern: /^\/galaxies\/([^/]+)\/locations$/, handler: routeLocations },
+  { pattern: /^\/galaxies\/([^/]+)\/locations\/([^/]+)$/, handler: routeLocation },
+  { pattern: /^\/galaxies\/([^/]+)\/items$/, handler: routeItems },
+  { pattern: /^\/galaxies\/([^/]+)\/items\/new$/, handler: routeItemNew },
+  { pattern: /^\/galaxies\/([^/]+)\/items\/([^/]+)\/edit$/, handler: routeItemEdit },
+  { pattern: /^\/galaxies\/([^/]+)\/items\/([^/]+)$/, handler: routeItem },
   { pattern: /^\/profile$/, handler: routeProfile },
   { pattern: /^\/invite\/([^/]+)$/, handler: routeInvite },
 ]
 
 function routeHome() {
-  if (auth.isLoggedIn) return navigate('/inventories')
+  if (auth.isLoggedIn) return navigate('/galaxies')
   setBreadcrumb([])
   setNav(false)
   setHTML(`
@@ -162,9 +162,9 @@ function routeHome() {
 }
 
 function routeLogin() {
-  if (auth.isLoggedIn) return navigate('/inventories')
+  if (auth.isLoggedIn) return navigate('/galaxies')
   setBreadcrumb([])
-  const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
+  const redirect = new URLSearchParams(location.search).get('redirect') || '/galaxies'
   setHTML(`
     <div class="auth-page">
       <div class="auth-card">
@@ -188,7 +188,7 @@ function routeLogin() {
           </div>
         </form>
         <div class="auth-footer">
-          No account? <a href="/signup${redirect !== '/inventories' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Create one</a>
+          No account? <a href="/signup${redirect !== '/galaxies' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Create one</a>
         </div>
       </div>
     </div>
@@ -219,9 +219,9 @@ function routeLogin() {
 }
 
 function routeSignup() {
-  if (auth.isLoggedIn) return navigate('/inventories')
+  if (auth.isLoggedIn) return navigate('/galaxies')
   setBreadcrumb([])
-  const redirect = new URLSearchParams(location.search).get('redirect') || '/inventories'
+  const redirect = new URLSearchParams(location.search).get('redirect') || '/galaxies'
   setHTML(`
     <div class="auth-page">
       <div class="auth-card">
@@ -250,7 +250,7 @@ function routeSignup() {
           </div>
         </form>
         <div class="auth-footer">
-          Already have an account? <a href="/login${redirect !== '/inventories' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Sign in</a>
+          Already have an account? <a href="/login${redirect !== '/galaxies' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Sign in</a>
         </div>
       </div>
     </div>
@@ -281,31 +281,31 @@ function routeSignup() {
   })
 }
 
-async function routeInventories() {
+async function routeGalaxies() {
   if (!auth.isLoggedIn) return navigate('/login')
   setBreadcrumb([])
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const data = await api('GET', '/inventories')
+    const data = await api('GET', '/galaxies')
     if (!data) return
 
-    const { inventories } = data
-    const listHTML = inventories.length === 0
+    const { galaxies } = data
+    const listHTML = galaxies.length === 0
       ? `<div class="empty-state">
            <div class="empty-state__icon">📦</div>
-           <div class="empty-state__title">No inventories yet</div>
+           <div class="empty-state__title">No galaxies yet</div>
            <div class="empty-state__body">
-             Create your first inventory to start tracking your treasures.
+             Create your first galaxy to start tracking your treasures.
            </div>
-           <a href="/inventories/new" data-link class="btn btn-primary">Create inventory</a>
+           <a href="/galaxies/new" data-link class="btn btn-primary">Create galaxy</a>
          </div>`
-      : `<div class="item-list" id="inv-list">
-           ${inventories.map(inv => `
-             <div class="item-row inv-row" draggable="true" data-id="${inv.id}">
+      : `<div class="item-list" id="galaxy-list">
+           ${galaxies.map(inv => `
+             <div class="item-row galaxy-row" draggable="true" data-id="${inv.id}">
                <span class="drag-handle" aria-hidden="true">⠿</span>
-               <a href="/inventories/${inv.id}" data-link class="inv-row__link">
-                 <div class="item-row__photo item-row__photo--placeholder">${inventoryIcon(inv.name)}</div>
+               <a href="/galaxies/${inv.id}" data-link class="galaxy-row__link">
+                 <div class="item-row__photo item-row__photo--placeholder">${galaxyIcon(inv.name)}</div>
                  <div class="item-row__info">
                    <div class="item-row__name">${escapeHTML(inv.name)}</div>
                    <div class="item-row__meta">${inv.subtitle ? escapeHTML(inv.subtitle) + ' · ' : ''}${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
@@ -319,7 +319,7 @@ async function routeInventories() {
     setHTML(`
       <div class="page-header page-header-row">
         <div>
-          <h1 class="page-title">My Inventories</h1>
+          <h1 class="page-title">My Galaxies</h1>
           <p class="page-subtitle">Your collections, organized</p>
         </div>
         <div style="display:flex;gap:var(--space-2);align-items:center">
@@ -330,7 +330,7 @@ async function routeInventories() {
               <path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 20h3"/>
             </svg>
           </button>
-          <a href="/inventories/new" data-link class="btn btn-primary btn-sm">+ New</a>
+          <a href="/galaxies/new" data-link class="btn btn-primary btn-sm">+ New</a>
         </div>
       </div>
 
@@ -339,7 +339,7 @@ async function routeInventories() {
       </div>
 
       <div id="search-results" hidden></div>
-      <div id="inv-section">${listHTML}</div>
+      <div id="galaxy-section">${listHTML}</div>
 
       <div id="qr-overlay" class="qr-overlay" hidden>
         <div class="qr-modal">
@@ -366,52 +366,52 @@ async function routeInventories() {
     document.getElementById('btn-qr-close').addEventListener('click', () => { overlay.hidden = true })
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true })
 
-    if (inventories.length > 1) {
-      const list = document.getElementById('inv-list')
+    if (galaxies.length > 1) {
+      const list = document.getElementById('galaxy-list')
       let dragSrc = null
 
       list.addEventListener('dragstart', e => {
-        dragSrc = e.target.closest('.inv-row')
+        dragSrc = e.target.closest('.galaxy-row')
         if (!dragSrc) return
-        dragSrc.classList.add('inv-row--dragging')
+        dragSrc.classList.add('galaxy-row--dragging')
         e.dataTransfer.effectAllowed = 'move'
       })
 
       list.addEventListener('dragover', e => {
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
-        const target = e.target.closest('.inv-row')
+        const target = e.target.closest('.galaxy-row')
         if (!target || target === dragSrc) return
-        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over'))
-        target.classList.add('inv-row--drag-over')
+        list.querySelectorAll('.galaxy-row').forEach(r => r.classList.remove('galaxy-row--drag-over'))
+        target.classList.add('galaxy-row--drag-over')
       })
 
       list.addEventListener('dragleave', e => {
-        if (!e.relatedTarget?.closest?.('#inv-list')) {
-          list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over'))
+        if (!e.relatedTarget?.closest?.('#galaxy-list')) {
+          list.querySelectorAll('.galaxy-row').forEach(r => r.classList.remove('galaxy-row--drag-over'))
         }
       })
 
       list.addEventListener('drop', async e => {
         e.preventDefault()
-        const target = e.target.closest('.inv-row')
-        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--drag-over', 'inv-row--dragging'))
+        const target = e.target.closest('.galaxy-row')
+        list.querySelectorAll('.galaxy-row').forEach(r => r.classList.remove('galaxy-row--drag-over', 'galaxy-row--dragging'))
         if (!target || !dragSrc || target === dragSrc) return
 
         // Reorder in DOM
-        const rows = [...list.querySelectorAll('.inv-row')]
+        const rows = [...list.querySelectorAll('.galaxy-row')]
         const srcIdx = rows.indexOf(dragSrc)
         const tgtIdx = rows.indexOf(target)
         if (srcIdx < tgtIdx) target.after(dragSrc)
         else target.before(dragSrc)
 
         // Persist new order
-        const order = [...list.querySelectorAll('.inv-row')].map(r => r.dataset.id)
-        api('PATCH', '/inventories/reorder', { order }).catch(() => {})
+        const order = [...list.querySelectorAll('.galaxy-row')].map(r => r.dataset.id)
+        api('PATCH', '/galaxies/reorder', { order }).catch(() => {})
       })
 
       list.addEventListener('dragend', () => {
-        list.querySelectorAll('.inv-row').forEach(r => r.classList.remove('inv-row--dragging', 'inv-row--drag-over'))
+        list.querySelectorAll('.galaxy-row').forEach(r => r.classList.remove('galaxy-row--dragging', 'galaxy-row--drag-over'))
         dragSrc = null
       })
     }
@@ -420,7 +420,7 @@ async function routeInventories() {
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
     const searchEl    = document.getElementById('global-search')
     const resultsEl   = document.getElementById('search-results')
-    const invSection  = document.getElementById('inv-section')
+    const invSection  = document.getElementById('galaxy-section')
     let searchTimer   = null
 
     searchEl.addEventListener('input', () => {
@@ -447,14 +447,14 @@ async function routeInventories() {
           } else {
             resultsEl.innerHTML = `<div class="item-list">
               ${items.map(item => `
-                <a href="/inventories/${item.inventory_id}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
+                <a href="/galaxies/${item.galaxy_id}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
                   ${item.photo_url
                     ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
                     : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
                   }
                   <div class="item-row__info">
                     <div class="item-row__name">${escapeHTML(item.name)}</div>
-                    <div class="item-row__meta">${escapeHTML(item.inventory_name)}${item.location_path ? ' · ' + escapeHTML(item.location_path) : ''}${item.category_name ? ' · ' + escapeHTML(item.category_name) : ''}</div>
+                    <div class="item-row__meta">${escapeHTML(item.galaxy_name)}${item.location_path ? ' · ' + escapeHTML(item.location_path) : ''}${item.category_name ? ' · ' + escapeHTML(item.category_name) : ''}</div>
                   </div>
                   <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
                 </a>
@@ -470,21 +470,21 @@ async function routeInventories() {
   }
 }
 
-function routeInventoryNew() {
+function routeGalaxyNew() {
   if (!auth.isLoggedIn) return navigate('/login')
   setBreadcrumb([
-    { label: 'Inventories', href: '/inventories' },
-    { label: 'New Inventory' },
+    { label: 'Galaxies', href: '/galaxies' },
+    { label: 'New Galaxy' },
   ])
   setHTML(`
     <div>
       <div class="page-header">
-        <h1 class="page-title">New Inventory</h1>
+        <h1 class="page-title">New Galaxy</h1>
       </div>
       <div class="card">
         <div class="card-body">
           <div id="form-error" role="alert"></div>
-          <form id="new-inventory-form">
+          <form id="new-galaxy-form">
             <div class="field">
               <label for="inv-name">Name</label>
               <input type="text" id="inv-name" name="name" placeholder="e.g. Home, Workshop, Office" required autofocus>
@@ -494,8 +494,8 @@ function routeInventoryNew() {
               <input type="text" id="inv-subtitle" name="subtitle" placeholder="e.g. 123 Lawrence St, Ford Focus 2015 (red)">
             </div>
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Create inventory</button>
-              <a href="/inventories" data-link class="btn btn-secondary">Cancel</a>
+              <button type="submit" class="btn btn-primary">Create galaxy</button>
+              <a href="/galaxies" data-link class="btn btn-secondary">Cancel</a>
             </div>
           </form>
         </div>
@@ -503,15 +503,15 @@ function routeInventoryNew() {
     </div>
   `)
 
-  document.getElementById('new-inventory-form').addEventListener('submit', async e => {
+  document.getElementById('new-galaxy-form').addEventListener('submit', async e => {
     e.preventDefault()
     const btn = e.target.querySelector('[type=submit]')
     const errEl = document.getElementById('form-error')
     errEl.innerHTML = ''
     btn.disabled = true
     try {
-      const data = await api('POST', '/inventories', { name: e.target.name.value, subtitle: e.target.subtitle.value })
-      if (data) navigate(`/inventories/${data.inventory.id}`)
+      const data = await api('POST', '/galaxies', { name: e.target.name.value, subtitle: e.target.subtitle.value })
+      if (data) navigate(`/galaxies/${data.galaxy.id}`)
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
       btn.disabled = false
@@ -519,30 +519,30 @@ function routeInventoryNew() {
   })
 }
 
-async function routeInventory(matches) {
+async function routeGalaxy(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const inventoryId = matches[1]
+  const galaxyId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
     const [invData, membersData, locData, catData] = await Promise.all([
-      api('GET', `/inventories/${inventoryId}`),
-      api('GET', `/inventories/${inventoryId}/members`),
-      api('GET', `/inventories/${inventoryId}/locations`),
-      api('GET', `/inventories/${inventoryId}/categories`),
+      api('GET', `/galaxies/${galaxyId}`),
+      api('GET', `/galaxies/${galaxyId}/members`),
+      api('GET', `/galaxies/${galaxyId}/locations`),
+      api('GET', `/galaxies/${galaxyId}/categories`),
     ])
     if (!invData || !membersData) return
 
-    const { inventory } = invData
+    const { galaxy } = invData
     const { members } = membersData
     let locations = locData?.locations ?? []
     let categories = catData?.categories ?? []
-    const isOwner = inventory.role === 'owner'
-    const canEdit = inventory.role === 'owner' || inventory.role === 'editor'
+    const isOwner = galaxy.role === 'owner'
+    const canEdit = galaxy.role === 'owner' || galaxy.role === 'editor'
 
     setBreadcrumb([
-      { label: 'Inventories', href: '/inventories' },
-      { label: inventory.name },
+      { label: 'Galaxies', href: '/galaxies' },
+      { label: galaxy.name },
     ])
 
     const roleBadgeClass = { owner: 'badge-green', editor: 'badge-orange', viewer: 'badge-gray' }
@@ -570,21 +570,21 @@ async function routeInventory(matches) {
         <div class="page-header">
           <div class="page-header-row">
             <div>
-              <h1 class="page-title">${escapeHTML(inventory.name)}</h1>
+              <h1 class="page-title">${escapeHTML(galaxy.name)}</h1>
               <p class="page-subtitle">
-                ${inventory.subtitle ? escapeHTML(inventory.subtitle) + ' · ' : ''}${inventory.item_count} item${inventory.item_count !== 1 ? 's' : ''}
-                · <span class="badge ${roleBadgeClass[inventory.role]}">${roleLabel[inventory.role]}</span>
+                ${galaxy.subtitle ? escapeHTML(galaxy.subtitle) + ' · ' : ''}${galaxy.item_count} item${galaxy.item_count !== 1 ? 's' : ''}
+                · <span class="badge ${roleBadgeClass[galaxy.role]}">${roleLabel[galaxy.role]}</span>
               </p>
             </div>
-            ${canEdit ? `<a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>` : ''}
+            ${canEdit ? `<a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>` : ''}
           </div>
         </div>
 
         <div style="display:flex;gap:var(--space-3);margin-bottom:var(--space-6)">
-          <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary" style="flex:1">
+          <a href="/galaxies/${galaxyId}/items" data-link class="btn btn-secondary" style="flex:1">
             Browse items →
           </a>
-          <a href="/inventories/${inventoryId}/locations" data-link class="btn btn-secondary" style="flex:1">
+          <a href="/galaxies/${galaxyId}/locations" data-link class="btn btn-secondary" style="flex:1">
             Locations →
           </a>
         </div>
@@ -673,11 +673,11 @@ async function routeInventory(matches) {
             <form id="rename-form">
               <div class="field">
                 <label for="rename-input">Name</label>
-                <input type="text" id="rename-input" name="name" value="${escapeHTML(inventory.name)}" required>
+                <input type="text" id="rename-input" name="name" value="${escapeHTML(galaxy.name)}" required>
               </div>
               <div class="field">
                 <label for="subtitle-input">Description <span class="text-muted">(optional)</span></label>
-                <input type="text" id="subtitle-input" name="subtitle" value="${escapeHTML(inventory.subtitle ?? '')}" placeholder="e.g. 123 Lawrence St, Ford Focus 2015 (red)">
+                <input type="text" id="subtitle-input" name="subtitle" value="${escapeHTML(galaxy.subtitle ?? '')}" placeholder="e.g. 123 Lawrence St, Ford Focus 2015 (red)">
               </div>
               <button type="submit" class="btn btn-secondary btn-sm">Save</button>
             </form>
@@ -691,9 +691,9 @@ async function routeInventory(matches) {
           </div>
           <div class="card-body">
             <p class="text-sm text-muted mb-4">
-              Permanently delete this inventory and all its items. There is no undo.
+              Permanently delete this galaxy and all its items. There is no undo.
             </p>
-            <button class="btn btn-danger btn-sm" id="btn-delete-inv">Delete inventory</button>
+            <button class="btn btn-danger btn-sm" id="btn-delete-inv">Delete galaxy</button>
           </div>
         </div>
         ` : ''}
@@ -755,7 +755,7 @@ async function routeInventory(matches) {
           btn.addEventListener('click', async () => {
             const id = btn.dataset.id
             try {
-              await api('DELETE', `/inventories/${inventoryId}/locations/${id}`)
+              await api('DELETE', `/galaxies/${galaxyId}/locations/${id}`)
               const idx = locations.findIndex(l => l.id === id)
               if (idx !== -1) locations.splice(idx, 1)
               locations.forEach(l => { if (l.parent_id === id) l.parent_id = null })
@@ -767,7 +767,7 @@ async function routeInventory(matches) {
           nameEl.addEventListener('click', () => {
             const id = nameEl.dataset.id
             startInlineEdit(nameEl, async val => {
-              await api('PATCH', `/inventories/${inventoryId}/locations/${id}`, { name: val })
+              await api('PATCH', `/galaxies/${galaxyId}/locations/${id}`, { name: val })
               const loc = locations.find(l => l.id === id)
               if (loc) loc.name = val
               renderLocTree()
@@ -778,7 +778,7 @@ async function routeInventory(matches) {
           sel.addEventListener('change', async () => {
             const id = sel.dataset.id
             try {
-              await api('PATCH', `/inventories/${inventoryId}/locations/${id}`, { location_type: sel.value })
+              await api('PATCH', `/galaxies/${galaxyId}/locations/${id}`, { location_type: sel.value })
               const loc = locations.find(l => l.id === id)
               if (loc) loc.location_type = sel.value
               renderLocTree()
@@ -799,7 +799,7 @@ async function routeInventory(matches) {
             const name = input.value.trim()
             if (!name) return
             try {
-              const data = await api('POST', `/inventories/${inventoryId}/locations`, {
+              const data = await api('POST', `/galaxies/${galaxyId}/locations`, {
                 name,
                 parent_id: form.dataset.parent,
                 location_type: typeSelect.value,
@@ -849,7 +849,7 @@ async function routeInventory(matches) {
         const name = input.value.trim()
         if (!name) return
         try {
-          const data = await api('POST', `/inventories/${inventoryId}/locations`, { name, location_type: typeSelect.value })
+          const data = await api('POST', `/galaxies/${galaxyId}/locations`, { name, location_type: typeSelect.value })
           if (data) { locations.push(data.location); renderLocTree() }
           input.value = ''
         } catch (err) { alert(err.message) }
@@ -866,7 +866,7 @@ async function routeInventory(matches) {
         el.querySelectorAll('.tag__remove').forEach(btn => {
           btn.addEventListener('click', async () => {
             try {
-              await api('DELETE', `/inventories/${inventoryId}/${deletePath}/${btn.dataset.id}`)
+              await api('DELETE', `/galaxies/${galaxyId}/${deletePath}/${btn.dataset.id}`)
               list.splice(list.findIndex(i => i.id === btn.dataset.id), 1)
               renderTags(list, containerId, deletePath)
             } catch (err) { alert(err.message) }
@@ -887,7 +887,7 @@ async function routeInventory(matches) {
               const val = input.value.trim()
               if (!val || val === original) { renderTags(list, containerId, deletePath); return }
               try {
-                await api('PATCH', `/inventories/${inventoryId}/${deletePath}/${id}`, { name: val })
+                await api('PATCH', `/galaxies/${galaxyId}/${deletePath}/${id}`, { name: val })
                 const item = list.find(i => i.id === id)
                 if (item) item.name = val
                 renderTags(list, containerId, deletePath)
@@ -910,7 +910,7 @@ async function routeInventory(matches) {
         const name = input.value.trim()
         if (!name) return
         try {
-          const data = await api('POST', `/inventories/${inventoryId}/categories`, { name })
+          const data = await api('POST', `/galaxies/${galaxyId}/categories`, { name })
           if (data) { categories.push(data.category); renderTags(categories, 'cat-list', 'categories') }
           input.value = ''
         } catch (err) { alert(err.message) }
@@ -935,7 +935,7 @@ async function routeInventory(matches) {
         msgEl.innerHTML = ''
         btn.disabled = true
         try {
-          await api('POST', `/inventories/${inventoryId}/invite`, {
+          await api('POST', `/galaxies/${galaxyId}/invite`, {
             email: e.target.email.value,
             role: e.target.role.value,
           })
@@ -955,7 +955,7 @@ async function routeInventory(matches) {
         sel.addEventListener('change', async () => {
           const prev = sel.dataset.current
           try {
-            await api('PATCH', `/inventories/${inventoryId}/members/${sel.dataset.userId}`, { role: sel.value })
+            await api('PATCH', `/galaxies/${galaxyId}/members/${sel.dataset.userId}`, { role: sel.value })
             sel.dataset.current = sel.value
           } catch (err) {
             alert(err.message)
@@ -967,10 +967,10 @@ async function routeInventory(matches) {
       // ── Remove member ──────────────────────────────────────────────────
       document.querySelectorAll('.btn-remove-member').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm(`Remove ${btn.dataset.name} from this inventory?`)) return
+          if (!confirm(`Remove ${btn.dataset.name} from this galaxy?`)) return
           try {
-            await api('DELETE', `/inventories/${inventoryId}/members/${btn.dataset.userId}`)
-            navigate(`/inventories/${inventoryId}`)
+            await api('DELETE', `/galaxies/${galaxyId}/members/${btn.dataset.userId}`)
+            navigate(`/galaxies/${galaxyId}`)
           } catch (err) { alert(err.message) }
         })
       })
@@ -981,19 +981,19 @@ async function routeInventory(matches) {
         const msgEl = document.getElementById('rename-msg')
         msgEl.innerHTML = ''
         try {
-          await api('PATCH', `/inventories/${inventoryId}`, { name: e.target.name.value.trim(), subtitle: e.target.subtitle.value.trim() })
-          navigate(`/inventories/${inventoryId}`)
+          await api('PATCH', `/galaxies/${galaxyId}`, { name: e.target.name.value.trim(), subtitle: e.target.subtitle.value.trim() })
+          navigate(`/galaxies/${galaxyId}`)
         } catch (err) {
           msgEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
         }
       })
 
-      // ── Delete inventory ───────────────────────────────────────────────
+      // ── Delete galaxy ───────────────────────────────────────────────
       document.getElementById('btn-delete-inv').addEventListener('click', async () => {
-        if (!confirm(`Delete "${inventory.name}" and all its items? This cannot be undone.`)) return
+        if (!confirm(`Delete "${galaxy.name}" and all its items? This cannot be undone.`)) return
         try {
-          await api('DELETE', `/inventories/${inventoryId}`)
-          navigate('/inventories')
+          await api('DELETE', `/galaxies/${galaxyId}`)
+          navigate('/galaxies')
         } catch (err) { alert(err.message) }
       })
     }
@@ -1004,21 +1004,21 @@ async function routeInventory(matches) {
 
 async function routeLocations(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const inventoryId = matches[1]
+  const galaxyId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
     const [invData, locData] = await Promise.all([
-      api('GET', `/inventories/${inventoryId}`),
-      api('GET', `/inventories/${inventoryId}/locations`),
+      api('GET', `/galaxies/${galaxyId}`),
+      api('GET', `/galaxies/${galaxyId}/locations`),
     ])
     if (!invData || !locData) return
     const locations = locData.locations ?? []
-    const invName = invData.inventory.name
+    const invName = invData.galaxy.name
 
     setBreadcrumb([
-      { label: 'Inventories', href: '/inventories' },
-      { label: invName, href: `/inventories/${inventoryId}` },
+      { label: 'Galaxies', href: '/galaxies' },
+      { label: invName, href: `/galaxies/${galaxyId}` },
       { label: 'Locations' },
     ])
 
@@ -1043,7 +1043,7 @@ async function routeLocations(matches) {
         const indent = depth * 1.25
         const icon = LOC_TYPE_ICON[node.location_type] ?? '📍'
         return `
-          <a href="/inventories/${inventoryId}/locations/${node.id}" data-link
+          <a href="/galaxies/${galaxyId}/locations/${node.id}" data-link
              class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
             <span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>
             <span class="location-row__name">${escapeHTML(node.name)}</span>
@@ -1067,8 +1067,8 @@ async function routeLocations(matches) {
           ? `<div class="empty-state">
                <div class="empty-state__icon">📍</div>
                <div class="empty-state__title">No locations yet</div>
-               <div class="empty-state__body">Add locations in the inventory settings.</div>
-               <a href="/inventories/${inventoryId}" data-link class="btn btn-primary">Go to settings</a>
+               <div class="empty-state__body">Add locations in the galaxy settings.</div>
+               <a href="/galaxies/${galaxyId}" data-link class="btn btn-primary">Go to settings</a>
              </div>`
           : `<div class="card">
                <div class="location-tree">
@@ -1085,19 +1085,19 @@ async function routeLocations(matches) {
 
 async function routeLocation(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const [, inventoryId, locationId] = matches
+  const [, galaxyId, locationId] = matches
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
     const [locData, itemsData] = await Promise.all([
-      api('GET', `/inventories/${inventoryId}/locations`),
-      api('GET', `/inventories/${inventoryId}/items?location=${locationId}`),
+      api('GET', `/galaxies/${galaxyId}/locations`),
+      api('GET', `/galaxies/${galaxyId}/items?location=${locationId}`),
     ])
     if (!locData) return
 
     const allLocs = locData.locations ?? []
     const current = allLocs.find(l => l.id === locationId)
-    if (!current) return navigate(`/inventories/${inventoryId}/locations`)
+    if (!current) return navigate(`/galaxies/${galaxyId}/locations`)
 
     const children = allLocs.filter(l => l.parent_id === locationId)
     const parent = allLocs.find(l => l.id === current.parent_id)
@@ -1115,7 +1115,7 @@ async function routeLocation(matches) {
         <div class="card-header"><h2 class="section-title" style="margin:0">Sub-locations</h2></div>
         <div class="location-tree">
           ${children.map(c => `
-            <a href="/inventories/${inventoryId}/locations/${c.id}" data-link class="location-row">
+            <a href="/galaxies/${galaxyId}/locations/${c.id}" data-link class="location-row">
               <span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>
               <span class="location-row__name">${escapeHTML(c.name)}</span>
               <span class="location-row__count">${childCount(c.id)} item${childCount(c.id) !== 1 ? 's' : ''}</span>
@@ -1129,7 +1129,7 @@ async function routeLocation(matches) {
         <div class="card-header"><h2 class="section-title" style="margin:0">Items here</h2></div>
         <div class="item-list" style="padding:var(--space-2)">
           ${items.map(item => `
-            <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row">
+            <a href="/galaxies/${galaxyId}/items/${item.id}" data-link class="item-row">
               ${item.photo_url
                 ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
                 : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`}
@@ -1159,14 +1159,14 @@ async function routeLocation(matches) {
     }
 
     // Need inventory name — fetch it
-    const invData = await api('GET', `/inventories/${inventoryId}`)
-    const invName = invData?.inventory?.name ?? ''
+    const invData = await api('GET', `/galaxies/${galaxyId}`)
+    const invName = invData?.galaxy?.name ?? ''
 
     setBreadcrumb([
-      { label: 'Inventories', href: '/inventories' },
-      { label: invName, href: `/inventories/${inventoryId}` },
-      { label: 'Locations', href: `/inventories/${inventoryId}/locations` },
-      ...ancestors.map(a => ({ label: a.name, href: `/inventories/${inventoryId}/locations/${a.id}` })),
+      { label: 'Galaxies', href: '/galaxies' },
+      { label: invName, href: `/galaxies/${galaxyId}` },
+      { label: 'Locations', href: `/galaxies/${galaxyId}/locations` },
+      ...ancestors.map(a => ({ label: a.name, href: `/galaxies/${galaxyId}/locations/${a.id}` })),
       { label: current.name },
     ])
 
@@ -1187,22 +1187,22 @@ async function routeLocation(matches) {
 
 async function routeItems(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const inventoryId = matches[1]
+  const galaxyId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
     const [invData, itemsData] = await Promise.all([
-      api('GET', `/inventories/${inventoryId}`),
-      api('GET', `/inventories/${inventoryId}/items`),
+      api('GET', `/galaxies/${galaxyId}`),
+      api('GET', `/galaxies/${galaxyId}/items`),
     ])
     if (!invData || !itemsData) return
 
-    const { inventory } = invData
+    const { galaxy } = invData
     const allItems = itemsData.items
 
     setBreadcrumb([
-      { label: 'Inventories', href: '/inventories' },
-      { label: inventory.name, href: `/inventories/${inventoryId}` },
+      { label: 'Galaxies', href: '/galaxies' },
+      { label: galaxy.name, href: `/galaxies/${galaxyId}` },
       { label: 'Items' },
     ])
 
@@ -1226,7 +1226,7 @@ async function routeItems(matches) {
       }
       return `<div class="item-list">
         ${items.map(item => `
-          <a href="/inventories/${inventoryId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
+          <a href="/galaxies/${galaxyId}/items/${item.id}" data-link class="item-row" data-type="${item.item_type}">
             ${item.photo_url
               ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
               : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
@@ -1245,7 +1245,7 @@ async function routeItems(matches) {
       <div>
         <div class="page-header page-header-row">
           <h1 class="page-title">Items</h1>
-          <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
+          <a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
         </div>
 
         ${allItems.length > 0 ? `
@@ -1280,7 +1280,7 @@ async function routeItems(matches) {
                 <div class="empty-state__icon">✨</div>
                 <div class="empty-state__title">Nothing stashed yet</div>
                 <div class="empty-state__body">Add your first item to start tracking.</div>
-                <a href="/inventories/${inventoryId}/items/new" data-link class="btn btn-primary">Add item</a>
+                <a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary">Add item</a>
               </div>`
             : renderList(allItems)
           }
@@ -1341,21 +1341,21 @@ async function routeItems(matches) {
 
 async function routeItemNew(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const inventoryId = matches[1]
+  const galaxyId = matches[1]
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   const [invData, locData, catData] = await Promise.all([
-    api('GET', `/inventories/${inventoryId}`),
-    api('GET', `/inventories/${inventoryId}/locations`),
-    api('GET', `/inventories/${inventoryId}/categories`),
+    api('GET', `/galaxies/${galaxyId}`),
+    api('GET', `/galaxies/${galaxyId}/locations`),
+    api('GET', `/galaxies/${galaxyId}/categories`),
   ])
   const locations = locData?.locations ?? []
   const categories = catData?.categories ?? []
 
   setBreadcrumb([
-    { label: 'Inventories', href: '/inventories' },
-    { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
-    { label: 'Items', href: `/inventories/${inventoryId}/items` },
+    { label: 'Galaxies', href: '/galaxies' },
+    { label: invData?.galaxy?.name ?? '', href: `/galaxies/${galaxyId}` },
+    { label: 'Items', href: `/galaxies/${galaxyId}/items` },
     { label: 'Add Item' },
   ])
 
@@ -1505,7 +1505,7 @@ async function routeItemNew(matches) {
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add item</button>
-              <a href="/inventories/${inventoryId}/items" data-link class="btn btn-secondary">Cancel</a>
+              <a href="/galaxies/${galaxyId}/items" data-link class="btn btn-secondary">Cancel</a>
             </div>
           </form>
         </div>
@@ -1655,7 +1655,7 @@ async function routeItemNew(matches) {
     }
 
     try {
-      const data = await api('POST', `/inventories/${inventoryId}/items`, {
+      const data = await api('POST', `/galaxies/${galaxyId}/items`, {
         name: e.target.name.value,
         quantity: Number(e.target.quantity.value),
         unit: e.target.unit.value || undefined,
@@ -1667,9 +1667,9 @@ async function routeItemNew(matches) {
       })
       if (data) {
         if (productImageUrl) {
-          try { await api('POST', `/inventories/${inventoryId}/items/${data.item.id}/photos/url`, { url: productImageUrl }) } catch {}
+          try { await api('POST', `/galaxies/${galaxyId}/items/${data.item.id}/photos/url`, { url: productImageUrl }) } catch {}
         }
-        navigate(`/inventories/${inventoryId}/items/${data.item.id}`)
+        navigate(`/galaxies/${galaxyId}/items/${data.item.id}`)
       }
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
@@ -1680,21 +1680,21 @@ async function routeItemNew(matches) {
 
 async function routeItem(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const [, inventoryId, itemId] = matches
+  const [, galaxyId, itemId] = matches
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
     const [data, invData] = await Promise.all([
-      api('GET', `/inventories/${inventoryId}/items/${itemId}`),
-      api('GET', `/inventories/${inventoryId}`),
+      api('GET', `/galaxies/${galaxyId}/items/${itemId}`),
+      api('GET', `/galaxies/${galaxyId}`),
     ])
     if (!data) return
     const { item, photos } = data
 
     setBreadcrumb([
-      { label: 'Inventories', href: '/inventories' },
-      { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
-      { label: 'Items', href: `/inventories/${inventoryId}/items` },
+      { label: 'Galaxies', href: '/galaxies' },
+      { label: invData?.galaxy?.name ?? '', href: `/galaxies/${galaxyId}` },
+      { label: 'Items', href: `/galaxies/${galaxyId}/items` },
       { label: item.name },
     ])
 
@@ -1749,7 +1749,7 @@ async function routeItem(matches) {
         <div class="page-header">
           <div class="flex items-center justify-between">
             <div class="flex gap-2">
-              <a href="/inventories/${inventoryId}/items/${itemId}/edit" data-link class="btn btn-secondary btn-sm">Edit</a>
+              <a href="/galaxies/${galaxyId}/items/${itemId}/edit" data-link class="btn btn-secondary btn-sm">Edit</a>
               <button class="btn btn-ghost btn-sm" id="btn-delete" style="color:var(--c-danger)">Delete</button>
             </div>
           </div>
@@ -1801,8 +1801,8 @@ async function routeItem(matches) {
     document.getElementById('btn-delete').addEventListener('click', async () => {
       if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
       try {
-        await api('DELETE', `/inventories/${inventoryId}/items/${itemId}`)
-        navigate(`/inventories/${inventoryId}/items`)
+        await api('DELETE', `/galaxies/${galaxyId}/items/${itemId}`)
+        navigate(`/galaxies/${galaxyId}/items`)
       } catch (err) {
         alert(err.message)
       }
@@ -1817,12 +1817,12 @@ async function routeItem(matches) {
       try {
         const headers = {}
         if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
-        const res = await fetch(`/api/inventories/${inventoryId}/items/${itemId}/photos`, {
+        const res = await fetch(`/api/galaxies/${galaxyId}/items/${itemId}/photos`, {
           method: 'POST', headers, body: form,
         })
         if (res.status === 401) { auth.clear(); return navigate('/login') }
         if (!res.ok) { const d = await res.json().catch(() => null); throw new Error(d?.error ?? 'Upload failed') }
-        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+        navigate(`/galaxies/${galaxyId}/items/${itemId}`)
       } catch (err) {
         alert(err.message)
       }
@@ -1843,8 +1843,8 @@ async function routeItem(matches) {
       const url = document.getElementById('photo-url-input').value.trim()
       if (!url) return
       try {
-        await api('POST', `/inventories/${inventoryId}/items/${itemId}/photos/url`, { url })
-        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+        await api('POST', `/galaxies/${galaxyId}/items/${itemId}/photos/url`, { url })
+        navigate(`/galaxies/${galaxyId}/items/${itemId}`)
       } catch (err) {
         alert(err.message)
       }
@@ -1861,8 +1861,8 @@ async function routeItem(matches) {
       if (!confirm('Delete this photo?')) return
       const photoId = btn.dataset.photoId
       try {
-        await api('DELETE', `/inventories/${inventoryId}/items/${itemId}/photos/${photoId}`)
-        navigate(`/inventories/${inventoryId}/items/${itemId}`)
+        await api('DELETE', `/galaxies/${galaxyId}/items/${itemId}/photos/${photoId}`)
+        navigate(`/galaxies/${galaxyId}/items/${itemId}`)
       } catch (err) {
         alert(err.message)
       }
@@ -1870,7 +1870,7 @@ async function routeItem(matches) {
 
     // ---- Inline editing ----
     async function patchField(field, value) {
-      await api('PATCH', `/inventories/${inventoryId}/items/${itemId}`, { [field]: value })
+      await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, { [field]: value })
     }
 
     // Tab flow: commit current field and activate next/prev .inline-editable in DOM order
@@ -2111,23 +2111,23 @@ async function routeItem(matches) {
 
 async function routeItemEdit(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
-  const [, inventoryId, itemId] = matches
+  const [, galaxyId, itemId] = matches
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   const [itemData, invData, locData, catData] = await Promise.all([
-    api('GET', `/inventories/${inventoryId}/items/${itemId}`),
-    api('GET', `/inventories/${inventoryId}`),
-    api('GET', `/inventories/${inventoryId}/locations`),
-    api('GET', `/inventories/${inventoryId}/categories`),
+    api('GET', `/galaxies/${galaxyId}/items/${itemId}`),
+    api('GET', `/galaxies/${galaxyId}`),
+    api('GET', `/galaxies/${galaxyId}/locations`),
+    api('GET', `/galaxies/${galaxyId}/categories`),
   ])
   if (!itemData) return
   const { item } = itemData
 
   setBreadcrumb([
-    { label: 'Inventories', href: '/inventories' },
-    { label: invData?.inventory?.name ?? '', href: `/inventories/${inventoryId}` },
-    { label: 'Items', href: `/inventories/${inventoryId}/items` },
-    { label: item.name, href: `/inventories/${inventoryId}/items/${itemId}` },
+    { label: 'Galaxies', href: '/galaxies' },
+    { label: invData?.galaxy?.name ?? '', href: `/galaxies/${galaxyId}` },
+    { label: 'Items', href: `/galaxies/${galaxyId}/items` },
+    { label: item.name, href: `/galaxies/${galaxyId}/items/${itemId}` },
     { label: 'Edit' },
   ])
   const locations = locData?.locations ?? []
@@ -2273,7 +2273,7 @@ async function routeItemEdit(matches) {
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save changes</button>
-              <a href="/inventories/${inventoryId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
+              <a href="/galaxies/${galaxyId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
             </div>
           </form>
         </div>
@@ -2323,7 +2323,7 @@ async function routeItemEdit(matches) {
     }
 
     try {
-      await api('PATCH', `/inventories/${inventoryId}/items/${itemId}`, {
+      await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, {
         name:        e.target.name.value,
         quantity:    Number(e.target.quantity.value),
         unit:        e.target.unit.value || null,
@@ -2333,7 +2333,7 @@ async function routeItemEdit(matches) {
         description: e.target.description.value || null,
         custom_fields: customFields,
       })
-      navigate(`/inventories/${inventoryId}/items/${itemId}`)
+      navigate(`/galaxies/${galaxyId}/items/${itemId}`)
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
       btn.disabled = false
@@ -2481,7 +2481,7 @@ async function routeInvite(matches) {
     const data = await api('GET', `/invite/${token}`)
     if (!data) return
 
-    const { inventory, role, invited_by_name } = data
+    const { galaxy, role, invited_by_name } = data
     const roleLabel = { editor: 'Editor', viewer: 'Viewer' }
     const encodedRedirect = encodeURIComponent(`/invite/${token}`)
 
@@ -2495,7 +2495,7 @@ async function routeInvite(matches) {
           <h1 class="auth-title">You're invited!</h1>
           <p class="text-sm text-muted text-center" style="line-height:1.6">
             <strong>${escapeHTML(invited_by_name)}</strong> invited you to join<br>
-            <strong>${escapeHTML(inventory.name)}</strong>
+            <strong>${escapeHTML(galaxy.name)}</strong>
             as a <span class="badge badge-${role === 'editor' ? 'orange' : 'gray'}">${roleLabel[role] ?? role}</span>.
           </p>
           <div id="invite-error" role="alert"></div>
@@ -2518,7 +2518,7 @@ async function routeInvite(matches) {
         btn.textContent = 'Joining…'
         try {
           const res = await api('POST', `/invite/${token}/accept`)
-          if (res) navigate(`/inventories/${res.inventory_id}`)
+          if (res) navigate(`/galaxies/${res.galaxy_id}`)
         } catch (err) {
           document.getElementById('invite-error').innerHTML =
             `<div class="alert alert-error mt-4">${err.message}</div>`
@@ -2588,7 +2588,7 @@ window.addEventListener('popstate', () => render(location.pathname + location.se
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
-function inventoryIcon(name) {
+function galaxyIcon(name) {
   const n = name.toLowerCase()
   const rules = [
     [/\b(home|house|flat|apartment|condo|residence|cottage|cabin|hut)\b/, '🏠'],

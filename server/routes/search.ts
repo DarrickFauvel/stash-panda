@@ -12,7 +12,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.execute({
       sql: `SELECT i.id, i.name, i.quantity, i.unit, i.item_type,
-                   inv.id AS inventory_id, inv.name AS inventory_name,
+                   inv.id AS galaxy_id, inv.name AS galaxy_name,
                    c.name AS category_name,
                    CASE
                      WHEN l3.name IS NOT NULL THEN l3.name || ' > ' || l2.name || ' > ' || l.name

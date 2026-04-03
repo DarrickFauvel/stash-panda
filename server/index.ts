@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
 import authRoutes from './routes/auth.ts'
-import inventoryRoutes from './routes/inventories.ts'
+import galaxyRoutes from './routes/galaxies.ts'
 import inviteRoutes from './routes/invite.ts'
 import eventsRoutes from './routes/events.ts'
 import bggRoutes from './routes/bgg.ts'
@@ -29,7 +29,7 @@ app.use(express.static(join(root, 'public')))
 app.use('/uploads', express.static(process.env.UPLOAD_DIR ?? join(root, 'uploads')))
 
 app.use('/api/auth', authRoutes)
-app.use('/api/inventories', inventoryRoutes)
+app.use('/api/galaxies', galaxyRoutes)
 app.use('/api/invite', inviteRoutes)
 app.use('/api/bgg', bggRoutes)
 app.use('/api/search', searchRoutes)
