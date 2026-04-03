@@ -726,6 +726,16 @@ async function routeGalaxy(matches) {
           .map(n => ({ ...n, children: buildTree(nodes, n.id) }))
       }
 
+      function getLocDescendantIds(id) {
+        const result = new Set([id])
+        const stack = [id]
+        while (stack.length) {
+          const cur = stack.pop()
+          locations.filter(l => l.parent_id === cur).forEach(l => { result.add(l.id); stack.push(l.id) })
+        }
+        return result
+      }
+
       function startInlineEdit(nameEl, onSave) {
         const original = nameEl.textContent.trim()
         const input = document.createElement('input')
@@ -750,7 +760,7 @@ async function routeGalaxy(matches) {
       function renderLocTree() {
         const tree = buildTree(locations)
         const container = document.getElementById('loc-tree')
-        container.innerHTML = renderNodes(tree, 0)
+        container.innerHTML = '<div id="loc-root-drop" class="loc-root-drop" hidden>↑ Drop here to make top-level</div>' + renderNodes(tree, 0)
         container.querySelectorAll('.loc-delete').forEach(btn => {
           btn.addEventListener('click', async () => {
             const id = btn.dataset.id
@@ -809,6 +819,74 @@ async function routeGalaxy(matches) {
             } catch (err) { alert(err.message) }
           })
         })
+        container.querySelectorAll('.loc-drag-handle').forEach(handle => {
+          handle.addEventListener('mousedown', e => {
+            if (e.button !== 0) return
+            e.preventDefault()
+            const locId = handle.dataset.id
+            const sourceRow = handle.closest('.loc-node__row')
+            let clone = null, currentTarget = null, didDrag = false
+            const startX = e.clientX, startY = e.clientY
+
+            function getDropTarget(x, y) {
+              if (clone) clone.style.display = 'none'
+              const el = document.elementFromPoint(x, y)
+              if (clone) clone.style.display = ''
+              const rootDrop = el?.closest('#loc-root-drop')
+              if (rootDrop) return rootDrop
+              const row = el?.closest('.loc-node__row[data-id]')
+              if (!row || row === sourceRow) return null
+              if (getLocDescendantIds(locId).has(row.dataset.id)) return null
+              return row
+            }
+
+            function setTarget(target) {
+              if (currentTarget === target) return
+              if (currentTarget) currentTarget.classList.remove('loc-node--drag-over', 'loc-root-drop--active')
+              currentTarget = target
+              if (target) target.classList.add(target.id === 'loc-root-drop' ? 'loc-root-drop--active' : 'loc-node--drag-over')
+            }
+
+            function onMove(e) {
+              if (!didDrag && Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return
+              if (!didDrag) {
+                didDrag = true
+                const rect = sourceRow.getBoundingClientRect()
+                clone = sourceRow.cloneNode(true)
+                clone.style.cssText = `position:fixed;width:${rect.width}px;pointer-events:none;opacity:0.85;z-index:9999;border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,0.18);background:var(--c-surface);padding:var(--space-1) var(--space-2);`
+                document.body.appendChild(clone)
+                sourceRow.classList.add('loc-node--dragging')
+                document.getElementById('loc-root-drop')?.removeAttribute('hidden')
+              }
+              const rect = sourceRow.getBoundingClientRect()
+              clone.style.left = (e.clientX - rect.width / 2) + 'px'
+              clone.style.top = (e.clientY - 16) + 'px'
+              setTarget(getDropTarget(e.clientX, e.clientY))
+            }
+
+            async function onUp() {
+              document.removeEventListener('mousemove', onMove)
+              document.removeEventListener('mouseup', onUp)
+              clone?.remove()
+              sourceRow.classList.remove('loc-node--dragging')
+              document.getElementById('loc-root-drop')?.setAttribute('hidden', '')
+              const target = currentTarget
+              setTarget(null)
+              if (!didDrag || !target) return
+              const newParentId = target.id === 'loc-root-drop' ? null : target.dataset.id
+              const loc = locations.find(l => l.id === locId)
+              if (loc && (loc.parent_id ?? null) === (newParentId ?? null)) return
+              try {
+                await api('PATCH', `/galaxies/${galaxyId}/locations/${locId}`, { parent_id: newParentId ?? null })
+                if (loc) loc.parent_id = newParentId ?? null
+                renderLocTree()
+              } catch (err) { alert(err.message); renderLocTree() }
+            }
+
+            document.addEventListener('mousemove', onMove)
+            document.addEventListener('mouseup', onUp)
+          })
+        })
       }
 
       function renderNodes(nodes, depth) {
@@ -819,8 +897,9 @@ async function routeGalaxy(matches) {
             `<option value="${t2.value}"${t2.value === node.location_type ? ' selected' : ''}>${t2.icon} ${t2.label}</option>`
           ).join('')
           return `
-          <div class="loc-node loc-depth-${depth}">
-            <div class="loc-node__row">
+          <div class="loc-node loc-depth-${depth}" data-id="${node.id}">
+            <div class="loc-node__row" data-id="${node.id}">
+              <span class="loc-drag-handle" data-id="${node.id}" aria-hidden="true">⠿</span>
               <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
               <label class="loc-type-btn" title="Change type">
                 <span class="loc-type-btn__icon" aria-hidden="true">${t.icon}</span>

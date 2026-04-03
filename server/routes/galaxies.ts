@@ -400,8 +400,9 @@ router.delete('/:id/categories/:categoryId', requireAuth, async (req, res) => {
 // PATCH /api/galaxies/:id/locations/:locationId
 router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
   const { id, locationId } = req.params as Record<string, string>
-  const { name, location_type } = req.body
-  if (!name?.trim() && !location_type) return res.status(400).json({ error: 'Nothing to update' })
+  const { name, location_type, parent_id } = req.body
+  const hasParentId = 'parent_id' in req.body
+  if (!name?.trim() && !location_type && !hasParentId) return res.status(400).json({ error: 'Nothing to update' })
   try {
     const access = await db.execute({
       sql: "SELECT role FROM inventory_members WHERE inventory_id = ? AND user_id = ? AND role != 'viewer'",
@@ -409,14 +410,25 @@ router.patch('/:id/locations/:locationId', requireAuth, async (req, res) => {
     })
     if (!access.rows[0]) return res.status(403).json({ error: 'Permission denied' })
 
+    if (hasParentId && parent_id !== null && parent_id !== undefined) {
+      const allLocs = await db.execute({ sql: 'SELECT id, parent_id FROM locations WHERE inventory_id = ?', args: [id] })
+      const parentMap = new Map(allLocs.rows.map(r => [r.id as string, r.parent_id as string | null]))
+      let cur: string | null = parent_id
+      while (cur) {
+        if (cur === locationId) return res.status(400).json({ error: 'Cannot move a location into its own descendant' })
+        cur = parentMap.get(cur) ?? null
+      }
+    }
+
     const updates: string[] = []
     const args: (string | null)[] = []
     if (name?.trim()) { updates.push('name = ?'); args.push(name.trim()) }
     if (location_type && VALID_LOCATION_TYPES.includes(location_type)) { updates.push('location_type = ?'); args.push(location_type) }
+    if (hasParentId) { updates.push('parent_id = ?'); args.push(parent_id ?? null) }
     args.push(locationId, id)
 
     await db.execute({ sql: `UPDATE locations SET ${updates.join(', ')} WHERE id = ? AND inventory_id = ?`, args })
-    res.json({ location: { id: locationId, ...(name?.trim() ? { name: name.trim() } : {}), ...(location_type ? { location_type } : {}) } })
+    res.json({ location: { id: locationId, ...(name?.trim() ? { name: name.trim() } : {}), ...(location_type ? { location_type } : {}), ...(hasParentId ? { parent_id: parent_id ?? null } : {}) } })
   } catch (err) {
     res.status(500).json({ error: 'Server error' })
   }

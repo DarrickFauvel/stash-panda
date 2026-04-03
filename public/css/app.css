@@ -1098,6 +1098,47 @@ quantity-stepper input[type="number"] {
   margin-top: var(--space-1);
 }
 
+.loc-drag-handle {
+  flex-shrink: 0;
+  color: var(--c-text-subtle);
+  cursor: grab;
+  font-size: 1rem;
+  letter-spacing: -1px;
+  user-select: none;
+  touch-action: none;
+  padding: 0 2px;
+}
+
+.loc-drag-handle:active { cursor: grabbing; }
+
+.loc-node--dragging { opacity: 0.4; }
+
+.loc-node--drag-over {
+  outline: 2px solid var(--c-brand);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+.loc-root-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  border: 2px dashed var(--c-border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  color: var(--c-text-subtle);
+}
+
+.loc-root-drop[hidden] { display: none; }
+
+.loc-root-drop--active {
+  border-color: var(--c-brand);
+  color: var(--c-brand);
+  background: var(--c-brand-light);
+}
+
 .editable-name {
   cursor: text;
   border-radius: 3px;
