@@ -100,6 +100,8 @@ const routes = [
   { pattern: /^\/$/, handler: routeHome },
   { pattern: /^\/login$/, handler: routeLogin },
   { pattern: /^\/signup$/, handler: routeSignup },
+  { pattern: /^\/forgot-password$/, handler: routeForgotPassword },
+  { pattern: /^\/reset-password$/, handler: routeResetPassword },
   { pattern: /^\/galaxies$/, handler: routeGalaxies },
   { pattern: /^\/galaxies\/new$/, handler: routeGalaxyNew },
   { pattern: /^\/galaxies\/([^/]+)$/, handler: routeGalaxy },
@@ -188,6 +190,9 @@ function routeLogin() {
           </div>
         </form>
         <div class="auth-footer">
+          <a href="/forgot-password" data-link>Forgot password?</a>
+        </div>
+        <div class="auth-footer">
           No account? <a href="/signup${redirect !== '/galaxies' ? '?redirect=' + encodeURIComponent(redirect) : ''}" data-link>Create one</a>
         </div>
       </div>
@@ -202,14 +207,15 @@ function routeLogin() {
     btn.disabled = true
     btn.textContent = 'Signing in…'
     try {
-      const data = await api('POST', '/auth/login', {
-        email: e.target.email.value,
-        password: e.target.password.value,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: e.target.email.value, password: e.target.password.value }),
       })
-      if (data) {
-        auth.save(data.token, data.user)
-        navigate(redirect)
-      }
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      auth.save(data.token, data.user)
+      navigate(redirect)
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
       btn.disabled = false
@@ -264,19 +270,137 @@ function routeSignup() {
     btn.disabled = true
     btn.textContent = 'Creating account…'
     try {
-      const data = await api('POST', '/auth/signup', {
-        name: e.target.name.value,
-        email: e.target.email.value,
-        password: e.target.password.value,
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: e.target.name.value, email: e.target.email.value, password: e.target.password.value }),
       })
-      if (data) {
-        auth.save(data.token, data.user)
-        navigate(redirect)
-      }
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      auth.save(data.token, data.user)
+      navigate(redirect)
     } catch (err) {
       errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
       btn.disabled = false
       btn.textContent = 'Create account'
+    }
+  })
+}
+
+function routeForgotPassword() {
+  if (auth.isLoggedIn) return navigate('/galaxies')
+  setBreadcrumb([])
+  setNav(false)
+  setHTML(`
+    <div class="auth-page">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo__mark">🌌</div>
+          <div class="auth-logo__name">Pocket Universe</div>
+        </div>
+        <h1 class="auth-title">Reset your password</h1>
+        <p class="text-muted" style="margin-bottom:1rem;font-size:.95rem">Enter your email and we'll send you a reset link.</p>
+        <div id="auth-error" role="alert"></div>
+        <div id="auth-success" role="status"></div>
+        <form id="forgot-form">
+          <div class="field">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" required>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-full btn-lg">Send reset link</button>
+          </div>
+        </form>
+        <div class="auth-footer">
+          <a href="/login" data-link>Back to sign in</a>
+        </div>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('forgot-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('auth-error')
+    const successEl = document.getElementById('auth-success')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    btn.textContent = 'Sending…'
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: e.target.email.value }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      e.target.hidden = true
+      successEl.innerHTML = `<div class="alert alert-success mt-4">${data.message}</div>`
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
+      btn.disabled = false
+      btn.textContent = 'Send reset link'
+    }
+  })
+}
+
+function routeResetPassword() {
+  if (auth.isLoggedIn) return navigate('/galaxies')
+  setBreadcrumb([])
+  setNav(false)
+  const token = new URLSearchParams(location.search).get('token') || ''
+  setHTML(`
+    <div class="auth-page">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo__mark">🌌</div>
+          <div class="auth-logo__name">Pocket Universe</div>
+        </div>
+        <h1 class="auth-title">Choose a new password</h1>
+        <div id="auth-error" role="alert"></div>
+        <div id="auth-success" role="status"></div>
+        ${token ? `
+        <form id="reset-form">
+          <div class="field">
+            <label for="password">New password</label>
+            <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-full btn-lg">Set new password</button>
+          </div>
+        </form>` : `<div class="alert alert-error mt-4">Invalid or missing reset token.</div>`}
+        <div class="auth-footer">
+          <a href="/login" data-link>Back to sign in</a>
+        </div>
+      </div>
+    </div>
+  `)
+
+  if (!token) return
+
+  document.getElementById('reset-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = e.target.querySelector('[type=submit]')
+    const errEl = document.getElementById('auth-error')
+    const successEl = document.getElementById('auth-success')
+    errEl.innerHTML = ''
+    btn.disabled = true
+    btn.textContent = 'Saving…'
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password: e.target.password.value }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      e.target.hidden = true
+      successEl.innerHTML = `<div class="alert alert-success mt-4">${data.message}</div>`
+      setTimeout(() => navigate('/login'), 2000)
+    } catch (err) {
+      errEl.innerHTML = `<div class="alert alert-error mt-4">${err.message}</div>`
+      btn.disabled = false
+      btn.textContent = 'Set new password'
     }
   })
 }
@@ -330,7 +454,7 @@ async function routeGalaxies() {
               <path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 20h3"/>
             </svg>
           </button>
-          <a href="/galaxies/new" data-link class="btn btn-primary btn-sm">+ New</a>
+          <a href="/galaxies/new" data-link class="btn btn-primary btn-sm">+ New Galaxy</a>
         </div>
       </div>
 
@@ -724,7 +848,7 @@ async function routeGalaxy(matches) {
     // ── Locations & Categories ─────────────────────────────────────────────
     if (canEdit) {
       const LOC_TYPES = [
-        { value: 'room',       label: 'Room',       icon: '🏠' },
+        { value: 'room',       label: 'Room',       icon: '🚪' },
         { value: 'closet',     label: 'Closet',     icon: '🚪' },
         { value: 'shelf',      label: 'Shelf',      icon: '📚' },
         { value: 'drawer',     label: 'Drawer',     icon: '🗂️' },
@@ -1144,7 +1268,7 @@ async function routeLocations(matches) {
       return Number(node.item_count ?? 0) + node.children.reduce((s, c) => s + totalCount(c), 0)
     }
 
-    const LOC_TYPE_ICON = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+    const LOC_TYPE_ICON = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
 
     function renderTree(nodes, depth = 0) {
       if (!nodes.length) return ''
@@ -1213,7 +1337,7 @@ async function routeLocation(matches) {
     const parent = allLocs.find(l => l.id === current.parent_id)
     const items = itemsData?.items ?? []
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
-    const locTypeIcon = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+    const locTypeIcon = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
 
     // Count items for each child (direct only shown in badge, totals would need recursion)
     function childCount(locId) {
@@ -1469,7 +1593,7 @@ async function routeItemNew(matches) {
     { label: 'Add Item' },
   ])
 
-  const LOC_TYPE_ICON_NEW = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+  const LOC_TYPE_ICON_NEW = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
@@ -1497,6 +1621,7 @@ async function routeItemNew(matches) {
               <label for="barcode-input">Barcode</label>
               <div style="display:flex;gap:var(--space-2)">
                 <input type="text" id="barcode-input" inputmode="numeric" placeholder="Scan or type UPC…" autocomplete="off" style="flex:1">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-lookup-barcode">Look up</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-scan-barcode" hidden>📷 Scan</button>
               </div>
               <div id="scan-preview" hidden style="margin-top:var(--space-2)">
@@ -1705,6 +1830,11 @@ async function routeItemNew(matches) {
       const upc = barcodeInput.value.trim()
       if (upc) await lookupBarcode(upc)
     }
+  })
+
+  document.getElementById('btn-lookup-barcode').addEventListener('click', async () => {
+    const upc = barcodeInput.value.trim()
+    if (upc) await lookupBarcode(upc)
   })
 
   async function lookupBarcode(upc) {
@@ -2248,7 +2378,7 @@ async function routeItemEdit(matches) {
   const dim = cf.box_dimensions ?? {}
   const wt = cf.weight ?? {}
 
-  const LOC_TYPE_ICON_EDIT = { room:'🏠', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+  const LOC_TYPE_ICON_EDIT = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
@@ -2657,9 +2787,29 @@ async function routeInvite(matches) {
 
 // ─── Router core ─────────────────────────────────────────────────────────────
 
+function getPathDepth(path) {
+  const pathname = path.split('?')[0]
+  if (pathname === '/' || /^\/(login|signup|forgot-password|reset-password)/.test(pathname)) return 0
+  return pathname.split('/').filter(Boolean).length
+}
+
+let _currentDepth = getPathDepth(location.pathname)
+
+function doRender(path, direction) {
+  document.documentElement.dataset.navDir = direction
+  if (document.startViewTransition) {
+    document.startViewTransition(() => render(path))
+  } else {
+    render(path)
+  }
+}
+
 export function navigate(path) {
+  const newDepth = getPathDepth(path)
+  const direction = newDepth >= _currentDepth ? 'forward' : 'backward'
+  _currentDepth = newDepth
   history.pushState(null, '', path)
-  render(path)
+  doRender(path, direction)
 }
 
 function render(path) {
@@ -2694,7 +2844,13 @@ document.addEventListener('click', e => {
 })
 
 // Browser back/forward
-window.addEventListener('popstate', () => render(location.pathname + location.search))
+window.addEventListener('popstate', () => {
+  const path = location.pathname + location.search
+  const newDepth = getPathDepth(path)
+  const direction = newDepth >= _currentDepth ? 'forward' : 'backward'
+  _currentDepth = newDepth
+  doRender(path, direction)
+})
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
