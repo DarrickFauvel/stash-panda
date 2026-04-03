@@ -11,7 +11,7 @@ router.get('/:upc', requireAuth, async (req, res) => {
 
   try {
     const resp = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(upc)}`, {
-      headers: { 'Accept': 'application/json', 'User-Agent': 'StashPanda/1.0' },
+      headers: { 'Accept': 'application/json', 'User-Agent': 'PocketUniverse/1.0' },
     })
     if (resp.status === 429) return res.status(429).json({ error: 'Lookup rate limit reached, try again shortly' })
     if (!resp.ok) return res.status(502).json({ error: 'Lookup service unavailable' })

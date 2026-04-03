@@ -7,7 +7,7 @@
  *   queue         — pending mutations to replay when back online
  */
 
-const DB_NAME = 'stash-panda'
+const DB_NAME = 'pocket-universe'
 const DB_VERSION = 1
 
 let _db = null

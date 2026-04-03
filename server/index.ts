@@ -43,5 +43,5 @@ app.get(/^(?!\/api|\/events)/, (_req, res) => {
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`🐼 Stash Panda running at http://localhost:${PORT}`)
+  console.log(`🌌 Pocket Universe running at http://localhost:${PORT}`)
 })

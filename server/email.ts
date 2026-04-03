@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer'
 
 const APP_URL = process.env.APP_URL || 'http://localhost:3000'
-const FROM = process.env.EMAIL_FROM || 'Stash Panda <noreply@stashpanda.app>'
+const FROM = process.env.EMAIL_FROM || 'Pocket Universe <noreply@pocketuniverse.app>'
 
 function transport() {
   return nodemailer.createTransport({
@@ -37,15 +37,15 @@ export async function sendVerificationEmail(to: string, name: string, token: str
   const link = `${APP_URL}/verify-email?token=${token}`
   await send({
     to,
-    subject: 'Verify your Stash Panda email',
-    text: `Hi ${name},\n\nThanks for joining Stash Panda! Please verify your email address:\n\n${link}\n\nThis link expires in 24 hours. If you didn't create an account, you can safely ignore this.\n\n— Stash Panda`,
+    subject: 'Verify your Pocket Universe email',
+    text: `Hi ${name},\n\nThanks for joining Pocket Universe! Please verify your email address:\n\n${link}\n\nThis link expires in 24 hours. If you didn't create an account, you can safely ignore this.\n\n— Pocket Universe`,
     html: `
       <p>Hi ${name},</p>
-      <p>Thanks for joining Stash Panda! Please verify your email address:</p>
+      <p>Thanks for joining Pocket Universe! Please verify your email address:</p>
       <p><a href="${link}" style="background:#2d6a4f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Verify Email</a></p>
       <p>Or copy this link: ${link}</p>
       <p>This link expires in 24 hours. If you didn't create an account, you can safely ignore this.</p>
-      <p>— Stash Panda</p>
+      <p>— Pocket Universe</p>
     `,
   })
 }
@@ -54,14 +54,14 @@ export async function sendPasswordResetEmail(to: string, token: string) {
   const link = `${APP_URL}/reset-password?token=${token}`
   await send({
     to,
-    subject: 'Reset your Stash Panda password',
-    text: `Someone requested a password reset for your Stash Panda account.\n\nReset your password here:\n\n${link}\n\nThis link expires in 1 hour. If you didn't request this, you can safely ignore it.\n\n— Stash Panda`,
+    subject: 'Reset your Pocket Universe password',
+    text: `Someone requested a password reset for your Pocket Universe account.\n\nReset your password here:\n\n${link}\n\nThis link expires in 1 hour. If you didn't request this, you can safely ignore it.\n\n— Pocket Universe`,
     html: `
-      <p>Someone requested a password reset for your Stash Panda account.</p>
+      <p>Someone requested a password reset for your Pocket Universe account.</p>
       <p><a href="${link}" style="background:#2d6a4f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Reset Password</a></p>
       <p>Or copy this link: ${link}</p>
       <p>This link expires in 1 hour. If you didn't request this, you can safely ignore it.</p>
-      <p>— Stash Panda</p>
+      <p>— Pocket Universe</p>
     `,
   })
 }
@@ -76,14 +76,14 @@ export async function sendInviteEmail(
   const link = `${APP_URL}/invite/${token}`
   await send({
     to,
-    subject: `${inviterName} invited you to "${inventoryName}" on Stash Panda`,
-    text: `${inviterName} has invited you to join "${inventoryName}" as a${role === 'editor' ? 'n' : ''} ${role}.\n\nAccept the invite here:\n\n${link}\n\nThis invite expires in 7 days.\n\n— Stash Panda`,
+    subject: `${inviterName} invited you to "${inventoryName}" on Pocket Universe`,
+    text: `${inviterName} has invited you to join "${inventoryName}" as a${role === 'editor' ? 'n' : ''} ${role}.\n\nAccept the invite here:\n\n${link}\n\nThis invite expires in 7 days.\n\n— Pocket Universe`,
     html: `
       <p>${inviterName} has invited you to join <strong>${inventoryName}</strong> as a${role === 'editor' ? 'n' : ''} <strong>${role}</strong>.</p>
       <p><a href="${link}" style="background:#2d6a4f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Accept Invite</a></p>
       <p>Or copy this link: ${link}</p>
       <p>This invite expires in 7 days.</p>
-      <p>— Stash Panda</p>
+      <p>— Pocket Universe</p>
     `,
   })
 }

@@ -126,8 +126,8 @@ function routeLogin() {
     <div class="auth-page">
       <div class="auth-card">
         <div class="auth-logo">
-          <div class="auth-logo__mark">🐼</div>
-          <div class="auth-logo__name">Stash Panda</div>
+          <div class="auth-logo__mark">🌌</div>
+          <div class="auth-logo__name">Pocket Universe</div>
         </div>
         <h1 class="auth-title">Welcome back</h1>
         <div id="auth-error" role="alert"></div>
@@ -183,8 +183,8 @@ function routeSignup() {
     <div class="auth-page">
       <div class="auth-card">
         <div class="auth-logo">
-          <div class="auth-logo__mark">🐼</div>
-          <div class="auth-logo__name">Stash Panda</div>
+          <div class="auth-logo__mark">🌌</div>
+          <div class="auth-logo__name">Pocket Universe</div>
         </div>
         <h1 class="auth-title">Create account</h1>
         <div id="auth-error" role="alert"></div>
@@ -2340,8 +2340,8 @@ async function routeInvite(matches) {
       <div class="auth-page">
         <div class="auth-card">
           <div class="auth-logo">
-            <div class="auth-logo__mark">🐼</div>
-            <div class="auth-logo__name">Stash Panda</div>
+            <div class="auth-logo__mark">🌌</div>
+            <div class="auth-logo__name">Pocket Universe</div>
           </div>
           <h1 class="auth-title">You're invited!</h1>
           <p class="text-sm text-muted text-center" style="line-height:1.6">
@@ -2382,7 +2382,7 @@ async function routeInvite(matches) {
     setHTML(`
       <div class="auth-page">
         <div class="auth-card">
-          <div class="auth-logo"><div class="auth-logo__mark">🐼</div></div>
+          <div class="auth-logo"><div class="auth-logo__mark">🌌</div></div>
           <h1 class="auth-title">Invite not found</h1>
           <p class="text-sm text-muted text-center">
             This invite may have expired or already been used.

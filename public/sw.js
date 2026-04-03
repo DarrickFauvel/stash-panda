@@ -1,4 +1,4 @@
-const CACHE = 'stash-panda-v1'
+const CACHE = 'pocket-universe-v1'
 
 const APP_SHELL = [
   '/',
