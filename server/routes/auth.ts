@@ -159,6 +159,53 @@ router.post('/reset-password', async (req, res) => {
   }
 })
 
+// PATCH /api/auth/profile
+router.patch('/profile', requireAuth, async (req, res) => {
+  const { name, currentPassword, newPassword } = req.body
+
+  if (name !== undefined && !name?.trim()) {
+    return res.status(400).json({ error: 'Name cannot be empty' })
+  }
+  if (newPassword !== undefined) {
+    if (!currentPassword) return res.status(400).json({ error: 'Current password is required' })
+    if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' })
+  }
+
+  try {
+    const result = await db.execute({
+      sql: 'SELECT id, name, email, password_hash FROM users WHERE id = ?',
+      args: [req.user!.id],
+    })
+    const user = result.rows[0]
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    if (newPassword) {
+      const valid = await bcrypt.compare(currentPassword, user.password_hash as string)
+      if (!valid) return res.status(400).json({ error: 'Current password is incorrect' })
+    }
+
+    const updates: string[] = ['updated_at = unixepoch()']
+    const args: unknown[] = []
+
+    if (name?.trim()) { updates.push('name = ?'); args.push(name.trim()) }
+    if (newPassword)  { updates.push('password_hash = ?'); args.push(await bcrypt.hash(newPassword, 12)) }
+
+    args.push(req.user!.id)
+    await db.execute({ sql: `UPDATE users SET ${updates.join(', ')} WHERE id = ?`, args })
+
+    const newName = name?.trim() ?? (user.name as string)
+    const token = jwt.sign(
+      { id: req.user!.id, email: req.user!.email, name: newName },
+      process.env.JWT_SECRET!,
+      { expiresIn: '30d' }
+    )
+    res.json({ token, user: { id: req.user!.id, name: newName, email: req.user!.email } })
+  } catch (err) {
+    console.error('profile patch:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 // GET /api/auth/verify-email?token=:token
 router.get('/verify-email', async (req, res) => {
   const token = req.query.token as string

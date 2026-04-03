@@ -82,7 +82,7 @@ function setNav(isLoggedIn) {
       navigate('/login')
     })
   } else {
-    actions.innerHTML = ''
+    actions.innerHTML = `<a href="/login" data-link class="btn btn-primary btn-sm">Sign in</a>`
   }
 
   // Highlight active bottom nav item
@@ -114,8 +114,51 @@ const routes = [
 ]
 
 function routeHome() {
-  if (!auth.isLoggedIn) return navigate('/login')
-  navigate('/inventories')
+  if (auth.isLoggedIn) return navigate('/inventories')
+  setBreadcrumb([])
+  setNav(false)
+  setHTML(`
+    <div class="welcome-page">
+      <div class="welcome-hero">
+        <div class="auth-logo">
+          <div class="auth-logo__mark">🌌</div>
+          <div class="auth-logo__name">Pocket Universe</div>
+        </div>
+        <p class="welcome-tagline">Track everything that matters — at home, at work, anywhere.</p>
+      </div>
+
+      <div class="welcome-features">
+        <div class="welcome-feature">
+          <span class="welcome-feature__icon">📦</span>
+          <div>
+            <strong>Any kind of inventory</strong>
+            <p>Physical items, digital assets, subscriptions, documents — all in one place.</p>
+          </div>
+        </div>
+        <div class="welcome-feature">
+          <span class="welcome-feature__icon">👥</span>
+          <div>
+            <strong>Share with your people</strong>
+            <p>Invite family, roommates, or coworkers to manage collections together.</p>
+          </div>
+        </div>
+        <div class="welcome-feature">
+          <span class="welcome-feature__icon">📶</span>
+          <div>
+            <strong>Works offline</strong>
+            <p>Make changes anywhere — your data syncs when you're back online.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="welcome-actions">
+        <a href="/signup" data-link class="btn btn-primary btn-lg btn-full">Get started free</a>
+        <a href="/login" data-link class="btn btn-secondary btn-lg btn-full">Sign in</a>
+      </div>
+
+      <p class="welcome-footnote">No credit card required.</p>
+    </div>
+  `)
 }
 
 function routeLogin() {
@@ -2307,20 +2350,126 @@ function routeProfile() {
       <div class="page-header">
         <h1 class="page-title">Profile</h1>
       </div>
+
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Account details</h2>
+          <div id="profile-success" role="status"></div>
+          <div id="profile-error" role="alert"></div>
+          <form id="profile-form">
+            <div class="field">
+              <label for="profile-name">Name</label>
+              <input type="text" id="profile-name" name="name" value="${escapeHTML(user?.name ?? '')}" required>
+            </div>
+            <div class="field">
+              <label for="profile-email">Email</label>
+              <input type="email" id="profile-email" value="${escapeHTML(user?.email ?? '')}" disabled>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-sm" id="btn-save-profile">Save changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Change password</h2>
+          <div id="password-success" role="status"></div>
+          <div id="password-error" role="alert"></div>
+          <form id="password-form">
+            <div class="field">
+              <label for="current-password">Current password</label>
+              <input type="password" id="current-password" name="currentPassword" autocomplete="current-password" required>
+            </div>
+            <div class="field">
+              <label for="new-password">New password</label>
+              <input type="password" id="new-password" name="newPassword" autocomplete="new-password" minlength="8" required>
+            </div>
+            <div class="field">
+              <label for="confirm-password">Confirm new password</label>
+              <input type="password" id="confirm-password" name="confirmPassword" autocomplete="new-password" minlength="8" required>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-sm" id="btn-save-password">Update password</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-body">
-          <p class="font-semi">${escapeHTML(user?.name ?? '')}</p>
-          <p class="text-sm text-muted mt-2">${escapeHTML(user?.email ?? '')}</p>
-          <div class="form-actions mt-6">
-            <button class="btn btn-danger btn-sm" id="btn-signout">Sign out</button>
-          </div>
+          <button class="btn btn-danger btn-sm" id="btn-signout">Sign out</button>
         </div>
       </div>
     </div>
   `)
+
   document.getElementById('btn-signout').addEventListener('click', () => {
     auth.clear()
     navigate('/login')
+  })
+
+  document.getElementById('profile-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = document.getElementById('btn-save-profile')
+    const successEl = document.getElementById('profile-success')
+    const errorEl = document.getElementById('profile-error')
+    successEl.innerHTML = ''
+    errorEl.innerHTML = ''
+    btn.disabled = true
+    btn.textContent = 'Saving…'
+    try {
+      const data = await api('PATCH', '/auth/profile', {
+        name: e.target.name.value,
+      })
+      if (data) {
+        auth.save(data.token, data.user)
+        setNav(true)
+        successEl.innerHTML = `<div class="alert alert-success mb-4">Name updated.</div>`
+        document.getElementById('profile-name').value = data.user.name
+      }
+    } catch (err) {
+      errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+    } finally {
+      btn.disabled = false
+      btn.textContent = 'Save changes'
+    }
+  })
+
+  document.getElementById('password-form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const btn = document.getElementById('btn-save-password')
+    const successEl = document.getElementById('password-success')
+    const errorEl = document.getElementById('password-error')
+    successEl.innerHTML = ''
+    errorEl.innerHTML = ''
+
+    const newPassword = e.target.newPassword.value
+    const confirmPassword = e.target.confirmPassword.value
+    if (newPassword !== confirmPassword) {
+      errorEl.innerHTML = `<div class="alert alert-error mb-4">Passwords do not match.</div>`
+      return
+    }
+
+    btn.disabled = true
+    btn.textContent = 'Updating…'
+    try {
+      const data = await api('PATCH', '/auth/profile', {
+        currentPassword: e.target.currentPassword.value,
+        newPassword,
+      })
+      if (data) {
+        auth.save(data.token, data.user)
+        successEl.innerHTML = `<div class="alert alert-success mb-4">Password updated.</div>`
+        e.target.reset()
+      }
+    } catch (err) {
+      errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+    } finally {
+      btn.disabled = false
+      btn.textContent = 'Update password'
+    }
   })
 }
 
