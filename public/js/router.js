@@ -596,13 +596,11 @@ async function routeGalaxy(matches) {
           <div class="card-body" style="display:flex;flex-direction:column;gap:var(--space-5)">
 
             <div>
-              <div class="text-sm font-medium mb-2">Locations</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
+                <div class="text-sm font-medium">Locations</div>
+                <button id="add-loc-btn" class="btn btn-secondary btn-xs">+ Location</button>
+              </div>
               <div id="loc-tree"></div>
-              <form id="add-room-form" class="inline-add-form mt-2">
-                <input type="text" id="room-input" placeholder="Name…" maxlength="80">
-                <select id="room-type" class="loc-form-type-select"></select>
-                <button type="submit" class="btn btn-secondary btn-sm">+ Add</button>
-              </form>
             </div>
 
             <div>
@@ -621,6 +619,29 @@ async function routeGalaxy(matches) {
               </form>
             </div>
 
+          </div>
+        </div>
+
+        <div id="add-loc-modal" class="modal-overlay" hidden>
+          <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="add-loc-modal-title">
+            <div class="modal-dialog__header">
+              <h3 class="font-semi" id="add-loc-modal-title">New location</h3>
+              <button class="modal-dialog__close" id="add-loc-close" aria-label="Close">×</button>
+            </div>
+            <form id="add-loc-form" class="modal-dialog__body">
+              <div class="field">
+                <label for="add-loc-name">Name</label>
+                <input type="text" id="add-loc-name" placeholder="e.g. Living Room" maxlength="80" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="add-loc-type">Type</label>
+                <select id="add-loc-type"></select>
+              </div>
+              <div class="modal-dialog__footer">
+                <button type="button" class="btn btn-ghost" id="add-loc-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add location</button>
+              </div>
+            </form>
           </div>
         </div>
         ` : ''}
@@ -918,19 +939,29 @@ async function routeGalaxy(matches) {
         `}).join('')
       }
 
-      document.getElementById('room-type').innerHTML = locTypeOptions
+      document.getElementById('add-loc-type').innerHTML = locTypeOptions
       renderLocTree()
 
-      document.getElementById('add-room-form').addEventListener('submit', async e => {
+      const addLocModal = document.getElementById('add-loc-modal')
+      const openAddLoc = () => { addLocModal.removeAttribute('hidden'); document.getElementById('add-loc-name').focus() }
+      const closeAddLoc = () => { addLocModal.setAttribute('hidden', ''); document.getElementById('add-loc-form').reset() }
+
+      document.getElementById('add-loc-btn').addEventListener('click', openAddLoc)
+      document.getElementById('add-loc-close').addEventListener('click', closeAddLoc)
+      document.getElementById('add-loc-cancel').addEventListener('click', closeAddLoc)
+      addLocModal.addEventListener('click', e => { if (e.target === addLocModal) closeAddLoc() })
+
+      document.getElementById('add-loc-form').addEventListener('submit', async e => {
         e.preventDefault()
-        const input = document.getElementById('room-input')
-        const typeSelect = document.getElementById('room-type')
-        const name = input.value.trim()
+        const name = document.getElementById('add-loc-name').value.trim()
         if (!name) return
         try {
-          const data = await api('POST', `/galaxies/${galaxyId}/locations`, { name, location_type: typeSelect.value })
+          const data = await api('POST', `/galaxies/${galaxyId}/locations`, {
+            name,
+            location_type: document.getElementById('add-loc-type').value,
+          })
           if (data) { locations.push(data.location); renderLocTree() }
-          input.value = ''
+          closeAddLoc()
         } catch (err) { alert(err.message) }
       })
 
