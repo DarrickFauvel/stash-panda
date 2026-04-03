@@ -1,8 +1,21 @@
-# Stash Panda — Product Specification
+# Pocket Universe — Product Specification
 
 ## Overview
 
-Stash Panda is a mobile-first Progressive Web App (PWA) for tracking inventory of anything — physical items, digital assets, subscriptions, and documents. It supports households and small businesses with multi-user shared inventories, offline-first operation, and a full usage history per item.
+Pocket Universe is a mobile-first Progressive Web App (PWA) for tracking inventory of anything — physical items, digital assets, subscriptions, and documents. It supports households and small businesses with multi-user shared collections, offline-first operation, and a full usage history per item.
+
+---
+
+## Terminology
+
+| UI Term | What it means | URL segment |
+|---|---|---|
+| **Pocket Universe** | The whole app / a user's account | — |
+| **Galaxy** | A named collection with its own members and locations (e.g. "Board Games", "Home", "Workshop") | `/galaxies` |
+| **Location** | A place within a galaxy where items live (e.g. "Game Closet", "Shelf A") — hierarchical | — |
+| **Item** | A tracked thing inside a galaxy | `/items` |
+
+Galaxies replace what was previously called "inventories" in code. The URL segment `/galaxies` reflects the current UI term.
 
 ---
 
@@ -81,10 +94,12 @@ Every item tracks:
 - Photo gallery (unlimited photos per item)
 - Delete item — hard delete, permanent, no recovery
 
-### 5. Inventory Organization
-- Users can create multiple named inventories (e.g. "Home", "Workshop", "Office")
-- Categories and locations are **scoped per inventory** — not shared across inventories
+### 5. Galaxy & Location Organization
+- Users can create multiple named galaxies (e.g. "Home", "Workshop", "Board Games")
+- A galaxy is a **system of locations** — rooms, shelves, boxes, bags, wherever things live
+- Categories and locations are **scoped per galaxy** — not shared across galaxies
 - Locations are hierarchical (e.g. Kitchen > Pantry > Top Shelf)
+- When creating a galaxy, users are prompted to add their first location before adding items
 
 ### 6. Export
 - Export an inventory or filtered item list to CSV
@@ -95,9 +110,9 @@ Every item tracks:
 
 ## Multi-User & Sharing
 
-### Inventories
-- A user can belong to multiple inventories
-- Each inventory is independent with its own member list
+### Galaxies
+- A user can belong to multiple galaxies
+- Each galaxy is independent with its own member list and locations
 
 ### Invitation Flow
 1. Owner sends invite via email
@@ -109,11 +124,11 @@ Every item tracks:
 
 | Role | Permissions |
 |---|---|
-| **Owner** | Full access; manage members; delete inventory; transfer ownership |
+| **Owner** | Full access; manage members; delete galaxy; transfer ownership |
 | **Editor** | Add/edit/delete items; log uses; manage locations & categories |
 | **Viewer** | Read-only; can export; cannot modify anything |
 
-- One owner per inventory (transferable)
+- One owner per galaxy (transferable)
 - Multiple editors and viewers allowed
 - Owner can change any member's role or remove them
 
@@ -167,14 +182,14 @@ Export is scoped to: current inventory, filtered view, or single item.
 
 ```
 / (home)
-  └── /inventories
-        ├── /inventories/:id              — inventory dashboard
-        │     ├── /inventories/:id/items  — item list / search
-        │     └── /inventories/:id/items/:itemId — item detail
-        └── /inventories/new             — create inventory
+  └── /galaxies
+        ├── /galaxies/:id              — galaxy dashboard
+        │     ├── /galaxies/:id/items  — item list / search
+        │     └── /galaxies/:id/items/:itemId — item detail
+        └── /galaxies/new             — create galaxy
 
-/profile                                 — account settings
-/invite/:token                           — accept invite
+/profile                               — account settings
+/invite/:token                         — accept invite
 ```
 
 ---
@@ -254,6 +269,66 @@ Client                          Express Server
 ### Dependency count target
 - Frontend: **0 npm dependencies** (Datastar loaded via CDN script tag; optionally `idb` for IndexedDB)
 - Backend: **6–7 packages** (`express`, `eta`, `@libsql/client`, `bcryptjs`, `jsonwebtoken`, `nodemailer`, optionally `multer` for file uploads)
+
+---
+
+## Onboarding Copy
+
+### Welcome screen (first login)
+> **Welcome to your Pocket Universe.**
+> Everything you own, organized in one place.
+> Start by creating your first galaxy.
+
+CTA: **Create a galaxy**
+
+---
+
+### Create galaxy screen (`/galaxies/new`)
+
+**Heading:** Name your galaxy
+
+**Subtext:** A galaxy is a collection of locations — rooms, shelves, boxes, wherever your stuff lives. You might have one for home, one for your workshop, one for board games.
+
+**Field:** Galaxy name *(placeholder: e.g. Home, Board Games, Workshop)*
+
+CTA: **Create galaxy**
+
+---
+
+### Add first location prompt (shown immediately after galaxy creation)
+
+**Heading:** Add a location to your *[Galaxy Name]* galaxy
+
+**Subtext:** Locations are the places inside your galaxy where items live — a shelf, a closet, a drawer, a bag. You can always add more later.
+
+**Field:** Location name *(placeholder: e.g. Game Closet, Shelf A, Kitchen Pantry)*
+
+CTA: **Add location** · **Skip for now**
+
+---
+
+### Empty galaxy state (no items yet)
+
+> Your *[Galaxy Name]* galaxy is empty.
+> Add your first item to get started.
+
+CTA: **Add an item**
+
+---
+
+### Empty galaxy — no locations added yet
+
+> You haven't added any locations to this galaxy yet.
+> Locations help you track *where* things are — a shelf, a room, a box.
+
+CTA: **Add a location** · **Add an item anyway**
+
+---
+
+### Invite accepted (joining someone else's galaxy)
+
+> You've joined the **[Galaxy Name]** galaxy.
+> You can browse and [edit / add items], depending on your role.
 
 ---
 
