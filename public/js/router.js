@@ -2970,6 +2970,47 @@ function formatDate(unixSeconds) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// ─── Theme picker ─────────────────────────────────────────────────────────────
+
+function initThemePicker() {
+  const saved = localStorage.getItem('pu_theme') || 'space'
+  applyTheme(saved)
+
+  const btn   = document.getElementById('theme-picker-btn')
+  const panel = document.getElementById('theme-panel')
+  if (!btn || !panel) return
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation()
+    panel.hidden = !panel.hidden
+  })
+
+  panel.addEventListener('click', e => {
+    const swatch = e.target.closest('[data-theme-pick]')
+    if (!swatch) return
+    const theme = swatch.dataset.themePick
+    applyTheme(theme)
+    localStorage.setItem('pu_theme', theme)
+    panel.hidden = true
+  })
+
+  document.addEventListener('click', () => { panel.hidden = true })
+}
+
+function applyTheme(theme) {
+  const html = document.documentElement
+  if (theme === 'space') {
+    delete html.dataset.theme
+  } else {
+    html.dataset.theme = theme
+  }
+  // Mark active swatch
+  document.querySelectorAll('[data-theme-pick]').forEach(s => {
+    s.setAttribute('aria-current', s.dataset.themePick === theme ? 'true' : 'false')
+  })
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+initThemePicker()
 initWelcomeCanvas()
 render(location.pathname)

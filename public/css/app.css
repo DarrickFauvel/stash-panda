@@ -605,10 +605,6 @@ quantity-stepper input[type="number"] {
   background: var(--c-bg);
 }
 
-.galaxy-row .item-row__photo--placeholder {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
 
 .item-row__info { flex: 1; min-width: 0; }
 
@@ -1439,6 +1435,96 @@ quantity-stepper input[type="number"] {
 .inline-desc-placeholder { font-style: italic; }
 
 
+/* ─── Themes ──────────────────────────────────────────────────────────────── */
+
+[data-theme="nebula"] {
+  --c-brand:          #c084fc;
+  --c-brand-dark:     #a855f7;
+  --c-brand-light:    #3b0f72;
+  --c-accent:         #f472b6;
+  --c-accent-light:   #4a0f2f;
+  --c-bg:             #0d0714;
+  --c-surface:        #150c24;
+  --c-surface-raised: #1e1035;
+}
+
+[data-theme="aurora"] {
+  --c-brand:          #34d399;
+  --c-brand-dark:     #10b981;
+  --c-brand-light:    #064e3b;
+  --c-accent:         #60a5fa;
+  --c-accent-light:   #1e3a5f;
+  --c-bg:             #030f0b;
+  --c-surface:        #061a12;
+  --c-surface-raised: #0a2419;
+}
+
+[data-theme="pulsar"] {
+  --c-brand:          #fb923c;
+  --c-brand-dark:     #f97316;
+  --c-brand-light:    #431407;
+  --c-accent:         #fbbf24;
+  --c-accent-light:   #451a03;
+  --c-bg:             #0f0a05;
+  --c-surface:        #1c1208;
+  --c-surface-raised: #261a0c;
+}
+
+/* ─── Theme Picker ────────────────────────────────────────────────────────── */
+
+.theme-picker { position: relative; }
+
+#theme-indicator {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--c-brand);
+  border: 2px solid rgba(255, 255, 255, 0.20);
+  transition: background 0.2s;
+}
+
+.theme-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  background: var(--c-surface-raised);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 148px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+}
+
+.theme-swatch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--c-text);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s;
+}
+.theme-swatch:hover { background: rgba(255, 255, 255, 0.07); }
+.theme-swatch[aria-current="true"] { background: rgba(255, 255, 255, 0.10); }
+
+.theme-swatch__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ─── View Transitions ────────────────────────────────────────────────────── */
 
 #root { overflow-x: hidden; }
@@ -1487,29 +1573,3 @@ quantity-stepper input[type="number"] {
   }
 }
 
-/* ─── Galaxy Section ──────────────────────────────────────────────────────── */
-
-.galaxy-row.item-row {
-  overflow: hidden;
-  border-color: rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.90);
-  background:
-    radial-gradient(circle 1px at  8% 20%, rgba(255,255,255,0.90) 0%, transparent 100%),
-    radial-gradient(circle 1px at 23% 75%, rgba(255,255,255,0.65) 0%, transparent 100%),
-    radial-gradient(circle 1px at 41% 30%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(circle 1px at 57% 80%, rgba(255,255,255,0.70) 0%, transparent 100%),
-    radial-gradient(circle 1px at 68% 15%, rgba(255,255,255,0.80) 0%, transparent 100%),
-    radial-gradient(circle 1px at 79% 60%, rgba(255,255,255,0.55) 0%, transparent 100%),
-    radial-gradient(circle 1px at 88% 35%, rgba(255,255,255,0.75) 0%, transparent 100%),
-    radial-gradient(circle 1px at 95% 85%, rgba(255,255,255,0.60) 0%, transparent 100%),
-    radial-gradient(ellipse at 25% 50%, rgba(139, 92, 246, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse at 72% 50%, rgba( 59,130, 246, 0.16) 0%, transparent 50%),
-    #0e0b20;
-}
-.galaxy-row.item-row:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  box-shadow: none;
-}
-.galaxy-row .item-row__meta { color: rgba(255, 255, 255, 0.50); }
-.galaxy-row .drag-handle    { color: rgba(255, 255, 255, 0.30); }
-.galaxy-row svg.text-muted  { color: rgba(255, 255, 255, 0.30); }
