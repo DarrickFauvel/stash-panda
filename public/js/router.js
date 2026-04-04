@@ -1028,13 +1028,10 @@ async function routeGalaxy(matches) {
           })
         })
         container.querySelectorAll('.loc-drag-handle').forEach(handle => {
-          handle.addEventListener('mousedown', e => {
-            if (e.button !== 0) return
-            e.preventDefault()
+          function startLocDrag(startX, startY) {
             const locId = handle.dataset.id
             const sourceRow = handle.closest('.loc-node__row')
             let clone = null, currentTarget = null, didDrag = false
-            const startX = e.clientX, startY = e.clientY
 
             function getDropTarget(x, y) {
               if (clone) clone.style.display = 'none'
@@ -1055,26 +1052,28 @@ async function routeGalaxy(matches) {
               if (target) target.classList.add(target.id === 'loc-root-drop' ? 'loc-root-drop--active' : 'loc-node--drag-over')
             }
 
-            function onMove(e) {
-              if (!didDrag && Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return
+            function onMove(x, y) {
+              if (!didDrag && Math.hypot(x - startX, y - startY) < 5) return
               if (!didDrag) {
                 didDrag = true
                 const rect = sourceRow.getBoundingClientRect()
                 clone = sourceRow.cloneNode(true)
-                clone.style.cssText = `position:fixed;width:${rect.width}px;pointer-events:none;opacity:0.85;z-index:9999;border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,0.18);background:var(--c-surface);padding:var(--space-1) var(--space-2);`
+                clone.style.cssText = `position:fixed;width:${rect.width}px;pointer-events:none;opacity:0.85;z-index:9999;border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,0.4);background:var(--c-surface);padding:var(--space-3) var(--space-2);`
                 document.body.appendChild(clone)
                 sourceRow.classList.add('loc-node--dragging')
                 document.getElementById('loc-root-drop')?.removeAttribute('hidden')
               }
               const rect = sourceRow.getBoundingClientRect()
-              clone.style.left = (e.clientX - rect.width / 2) + 'px'
-              clone.style.top = (e.clientY - 16) + 'px'
-              setTarget(getDropTarget(e.clientX, e.clientY))
+              clone.style.left = (x - rect.width / 2) + 'px'
+              clone.style.top = (y - 16) + 'px'
+              setTarget(getDropTarget(x, y))
             }
 
             async function onUp() {
-              document.removeEventListener('mousemove', onMove)
+              document.removeEventListener('mousemove', onMouseMove)
               document.removeEventListener('mouseup', onUp)
+              document.removeEventListener('touchmove', onTouchMove)
+              document.removeEventListener('touchend', onTouchEnd)
               clone?.remove()
               sourceRow.classList.remove('loc-node--dragging')
               document.getElementById('loc-root-drop')?.setAttribute('hidden', '')
@@ -1091,9 +1090,26 @@ async function routeGalaxy(matches) {
               } catch (err) { alert(err.message); renderLocTree() }
             }
 
-            document.addEventListener('mousemove', onMove)
+            function onMouseMove(e) { onMove(e.clientX, e.clientY) }
+            function onTouchMove(e) { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY) }
+            function onTouchEnd() { onUp() }
+
+            document.addEventListener('mousemove', onMouseMove)
             document.addEventListener('mouseup', onUp)
+            document.addEventListener('touchmove', onTouchMove, { passive: false })
+            document.addEventListener('touchend', onTouchEnd)
+          }
+
+          handle.addEventListener('mousedown', e => {
+            if (e.button !== 0) return
+            e.preventDefault()
+            startLocDrag(e.clientX, e.clientY)
           })
+
+          handle.addEventListener('touchstart', e => {
+            e.preventDefault()
+            startLocDrag(e.touches[0].clientX, e.touches[0].clientY)
+          }, { passive: false })
         })
       }
 
