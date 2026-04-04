@@ -1667,7 +1667,7 @@ async function routeItemNew(matches) {
     api('GET', `/galaxies/${galaxyId}/locations`),
     api('GET', `/galaxies/${galaxyId}/categories`),
   ])
-  const locations = locData?.locations ?? []
+  const locations  = locData?.locations ?? []
   const categories = catData?.categories ?? []
 
   setBreadcrumb([
@@ -1718,6 +1718,7 @@ async function routeItemNew(matches) {
             <div class="field">
               <label for="item-name">Name <span aria-hidden="true">*</span></label>
               <input type="text" id="item-name" name="name" required>
+              <div id="item-name-hint"></div>
             </div>
             <div class="field">
               <label for="item-qty">Quantity</label>
@@ -1845,6 +1846,38 @@ async function routeItemNew(matches) {
     const display = document.getElementById('bg-id-display')
     if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
     else { display.hidden = true }
+  })
+
+  // ── Duplicate item check ──────────────────────────────────────────────────
+  const nameInput = document.getElementById('item-name')
+  const nameHint  = document.getElementById('item-name-hint')
+  let dupTimer = null
+
+  nameInput.addEventListener('input', () => {
+    clearTimeout(dupTimer)
+    nameHint.innerHTML = ''
+    const val = nameInput.value.trim()
+    if (!val) return
+    dupTimer = setTimeout(async () => {
+      const data = await api('GET', `/galaxies/${galaxyId}/items?q=${encodeURIComponent(val)}`)
+      if (!data) return
+      const exact = (data.items ?? []).filter(i => i.name.toLowerCase() === val.toLowerCase())
+      if (!exact.length) return
+
+      const item = exact[0]
+      const locText = item.location_name ? ` · stored in <strong>${escapeHTML(item.location_name)}</strong>` : ''
+
+      nameHint.innerHTML = `
+        <div class="item-dup-hint">
+          <span>⚠ "<strong>${escapeHTML(item.name)}</strong>" already exists${locText}.</span>
+          <div class="item-dup-hint__actions">
+            <a href="/galaxies/${galaxyId}/items/${item.id}" data-link class="btn btn-secondary btn-sm">View item</a>
+            <button type="button" class="btn btn-ghost btn-sm" id="dup-dismiss">Add anyway</button>
+          </div>
+        </div>
+      `
+      document.getElementById('dup-dismiss').addEventListener('click', () => { nameHint.innerHTML = '' })
+    }, 350)
   })
 
   // ── Barcode scanning & lookup ─────────────────────────────────────────────
