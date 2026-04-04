@@ -163,6 +163,67 @@ function routeHome() {
   `)
 }
 
+function initWelcomeCanvas() {
+  const canvas = document.getElementById('star-canvas')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+
+  let W, H
+
+  function resize() {
+    W = canvas.width  = window.innerWidth
+    H = canvas.height = window.innerHeight
+  }
+  resize()
+  window.addEventListener('resize', resize)
+
+  // ── Build bodies ──────────────────────────────────────���───────────────────
+  const rand = (min, max) => Math.random() * (max - min) + min
+  const bodies = []
+
+  // Dot stars
+  const starColors = ['#ffffff', '#e8eeff', '#fff8e8', '#f0e8ff']
+  for (let i = 0; i < 55; i++) {
+    bodies.push({
+      type: 'star',
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.4, 1.8),
+      color: starColors[Math.floor(Math.random() * starColors.length)],
+      opacity: rand(0.15, 0.50),
+      vx: rand(-0.12, 0.12), vy: rand(-0.08, 0.08),
+      phase: rand(0, Math.PI * 2),
+      twinkleSpeed: rand(0.008, 0.025),
+    })
+  }
+
+  // ── Animation loop ────────────────────────────────────────────────────────
+  function frame() {
+    ctx.clearRect(0, 0, W, H)
+
+    for (const b of bodies) {
+      b.x += b.vx
+      b.y += b.vy
+      if (b.x < -40) b.x = W + 40
+      if (b.x > W + 40) b.x = -40
+      if (b.y < -40) b.y = H + 40
+      if (b.y > H + 40) b.y = -40
+
+      ctx.save()
+      b.phase += b.twinkleSpeed
+      ctx.globalAlpha = b.opacity * (0.55 + 0.45 * Math.sin(b.phase))
+      ctx.beginPath()
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2)
+      ctx.fillStyle = b.color
+      ctx.fill()
+      ctx.restore()
+    }
+
+    requestAnimationFrame(frame)
+  }
+
+  requestAnimationFrame(frame)
+}
+
 function routeLogin() {
   if (auth.isLoggedIn) return navigate('/galaxies')
   setBreadcrumb([])
@@ -198,6 +259,8 @@ function routeLogin() {
       </div>
     </div>
   `)
+
+  document.getElementById('email').focus()
 
   document.getElementById('login-form').addEventListener('submit', async e => {
     e.preventDefault()
@@ -2908,4 +2971,5 @@ function formatDate(unixSeconds) {
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+initWelcomeCanvas()
 render(location.pathname)
