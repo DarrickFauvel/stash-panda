@@ -972,6 +972,8 @@ async function routeGalaxy(matches) {
         container.querySelectorAll('.loc-delete').forEach(btn => {
           btn.addEventListener('click', async () => {
             const id = btn.dataset.id
+            const name = btn.closest('.loc-node__row')?.querySelector('.loc-node__name')?.textContent ?? 'this location'
+            if (!await confirmDelete(`Delete "${name}"?`, 'Items inside will be unassigned. Child locations will be moved up. This cannot be undone.')) return
             try {
               await api('DELETE', `/galaxies/${galaxyId}/locations/${id}`)
               const idx = locations.findIndex(l => l.id === id)
@@ -1178,6 +1180,9 @@ async function routeGalaxy(matches) {
         `).join('')
         el.querySelectorAll('.tag__remove').forEach(btn => {
           btn.addEventListener('click', async () => {
+            const name = btn.closest('.tag')?.querySelector('.tag-name')?.textContent ?? 'this'
+            const label = deletePath === 'categories' ? 'category' : 'item'
+            if (!await confirmDelete(`Delete "${name}"?`, `Items assigned to this ${label} will be unassigned.`)) return
             try {
               await api('DELETE', `/galaxies/${galaxyId}/${deletePath}/${btn.dataset.id}`)
               list.splice(list.findIndex(i => i.id === btn.dataset.id), 1)
@@ -1280,7 +1285,7 @@ async function routeGalaxy(matches) {
       // ── Remove member ──────────────────────────────────────────────────
       document.querySelectorAll('.btn-remove-member').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm(`Remove ${btn.dataset.name} from this galaxy?`)) return
+          if (!await confirmDelete(`Remove ${btn.dataset.name}?`, 'They will lose access to this galaxy.')) return
           try {
             await api('DELETE', `/galaxies/${galaxyId}/members/${btn.dataset.userId}`)
             navigate(`/galaxies/${galaxyId}`)
@@ -1303,7 +1308,7 @@ async function routeGalaxy(matches) {
 
       // ── Delete galaxy ───────────────────────────────────────────────
       document.getElementById('btn-delete-inv').addEventListener('click', async () => {
-        if (!confirm(`Delete "${galaxy.name}" and all its items? This cannot be undone.`)) return
+        if (!await confirmDelete(`Delete "${galaxy.name}"?`, 'All locations, categories and items will be permanently removed. This cannot be undone.')) return
         try {
           await api('DELETE', `/galaxies/${galaxyId}`)
           navigate('/galaxies')
@@ -2118,7 +2123,7 @@ async function routeItem(matches) {
     `)
 
     document.getElementById('btn-delete').addEventListener('click', async () => {
-      if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return
+      if (!await confirmDelete(`Delete "${item.name}"?`, 'This item and all its photos will be permanently removed.')) return
       try {
         await api('DELETE', `/galaxies/${galaxyId}/items/${itemId}`)
         navigate(`/galaxies/${galaxyId}/items`)
@@ -2177,7 +2182,7 @@ async function routeItem(matches) {
     document.getElementById('photo-gallery').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-photo-id].photo-gallery__delete')
       if (!btn) return
-      if (!confirm('Delete this photo?')) return
+      if (!await confirmDelete('Delete this photo?')) return
       const photoId = btn.dataset.photoId
       try {
         await api('DELETE', `/galaxies/${galaxyId}/items/${itemId}/photos/${photoId}`)
@@ -2930,6 +2935,42 @@ window.addEventListener('popstate', () => {
   _currentDepth = newDepth
   doRender(path, direction)
 })
+
+// ─── Confirm delete modal ─────────────────────────────────────────────────────
+
+function confirmDelete(title, body = '') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div')
+    overlay.className = 'delete-modal-overlay'
+    overlay.innerHTML = `
+      <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="dm-title">
+        <h3 class="delete-modal__title" id="dm-title">${escapeHTML(title)}</h3>
+        ${body ? `<p class="delete-modal__body">${escapeHTML(body)}</p>` : ''}
+        <div class="delete-modal__actions">
+          <button class="btn btn-secondary" id="dm-cancel">Cancel</button>
+          <button class="btn btn-danger"    id="dm-confirm">Delete</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(overlay)
+
+    const close = result => {
+      document.removeEventListener('keydown', onKey)
+      overlay.remove()
+      resolve(result)
+    }
+
+    overlay.querySelector('#dm-cancel').addEventListener('click', () => close(false))
+    overlay.querySelector('#dm-confirm').addEventListener('click', () => close(true))
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(false) })
+    overlay.querySelector('#dm-cancel').focus()
+
+    function onKey(e) {
+      if (e.key === 'Escape') close(false)
+    }
+    document.addEventListener('keydown', onKey)
+  })
+}
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 

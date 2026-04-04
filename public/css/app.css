@@ -1575,3 +1575,52 @@ quantity-stepper input[type="number"] {
   }
 }
 
+/* ─── Delete confirmation modal ───────────────────────────────────────────── */
+
+.delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  animation: dm-fade-in 0.15s ease;
+}
+
+.delete-modal {
+  background: var(--c-surface-raised);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  max-width: 22rem;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  animation: dm-slide-up 0.15s ease;
+}
+
+.delete-modal__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  margin-bottom: var(--space-2);
+}
+
+.delete-modal__body {
+  font-size: var(--text-sm);
+  color: var(--c-text-muted);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-6);
+}
+
+.delete-modal__actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+@keyframes dm-fade-in  { from { opacity: 0 } }
+@keyframes dm-slide-up { from { transform: translateY(10px); opacity: 0 } }
+
