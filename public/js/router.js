@@ -57,7 +57,12 @@ function setHTML(html) {
 // crumbs: [{label, href?}, ...] — last item is current page (no href)
 function setBreadcrumb(crumbs) {
   const bar = document.getElementById('breadcrumb-bar')
-  if (!crumbs.length) { bar.hidden = true; bar.innerHTML = ''; return }
+  const backBar = document.getElementById('back-bar')
+  if (!crumbs.length) {
+    bar.hidden = true; bar.innerHTML = ''
+    backBar.hidden = true; backBar.innerHTML = ''
+    return
+  }
   bar.hidden = false
   bar.innerHTML = crumbs.map((c, i) => {
     const isLast = i === crumbs.length - 1
@@ -66,6 +71,14 @@ function setBreadcrumb(crumbs) {
       : `<a href="${c.href}" data-link class="breadcrumb__item">${escapeHTML(c.label)}</a>
          <span class="breadcrumb__sep" aria-hidden="true">›</span>`
   }).join('')
+
+  const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null
+  if (parent) {
+    backBar.hidden = false
+    backBar.innerHTML = `<a href="${parent.href}" data-link class="back-link">‹ back</a>`
+  } else {
+    backBar.hidden = true; backBar.innerHTML = ''
+  }
 }
 
 function setNav(isLoggedIn) {
@@ -494,7 +507,7 @@ async function routeGalaxies() {
                <a href="/galaxies/${inv.id}" data-link class="galaxy-row__link">
                  <div class="item-row__photo item-row__photo--placeholder">${galaxyIcon(inv.name)}</div>
                  <div class="item-row__info">
-                   <div class="item-row__name">${escapeHTML(inv.name)}</div>
+                   <div class="item-row__name">${escapeHTML(inv.name)}<span class="galaxy-row__type-label">galaxy</span></div>
                    <div class="item-row__meta">${inv.subtitle ? escapeHTML(inv.subtitle) + ' · ' : ''}${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
                  </div>
                </a>
@@ -757,7 +770,7 @@ async function routeGalaxy(matches) {
         <div class="page-header">
           <div class="page-header-row">
             <div>
-              <h1 class="page-title">${escapeHTML(galaxy.name)}</h1>
+              <h1 class="page-title">${escapeHTML(galaxy.name)}<span class="galaxy-row__type-label" style="font-size:0.55em;vertical-align:baseline">galaxy</span></h1>
               <p class="page-subtitle">
                 ${galaxy.subtitle ? escapeHTML(galaxy.subtitle) + ' · ' : ''}${galaxy.item_count} item${galaxy.item_count !== 1 ? 's' : ''}
                 · <span class="badge ${roleBadgeClass[galaxy.role]}">${roleLabel[galaxy.role]}</span>
@@ -1509,14 +1522,25 @@ async function routeItems(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const [invData, itemsData] = await Promise.all([
+    const [invData, itemsData, locData] = await Promise.all([
       api('GET', `/galaxies/${galaxyId}`),
       api('GET', `/galaxies/${galaxyId}/items`),
+      api('GET', `/galaxies/${galaxyId}/locations`),
     ])
     if (!invData || !itemsData) return
 
     const { galaxy } = invData
     const allItems = itemsData.items
+
+    // Build full location path map: id → "A > B > C"
+    const allLocations = locData?.locations ?? []
+    const locById = Object.fromEntries(allLocations.map(l => [l.id, l]))
+    function locationPath(id) {
+      const parts = []
+      let cur = locById[id]
+      while (cur) { parts.unshift(cur.name); cur = locById[cur.parent_id] }
+      return parts.join(' › ')
+    }
 
     setBreadcrumb([
       { label: 'Galaxies', href: '/galaxies' },
@@ -1551,7 +1575,7 @@ async function routeItems(matches) {
             }
             <div class="item-row__info">
               <div class="item-row__name">${escapeHTML(item.name)}</div>
-              <div class="item-row__meta">${escapeHTML(item.category_name ?? item.location_name ?? item.item_type)}</div>
+              <div class="item-row__meta">${escapeHTML(item.location_id ? locationPath(item.location_id) : (item.category_name ?? item.item_type))}</div>
             </div>
             <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
           </a>
@@ -1562,7 +1586,7 @@ async function routeItems(matches) {
     setHTML(`
       <div>
         <div class="page-header page-header-row">
-          <h1 class="page-title">Items</h1>
+          <h1 class="page-title">Items<span class="galaxy-row__type-label" style="font-size:0.55em;vertical-align:baseline">${escapeHTML(galaxy.name)} galaxy</span></h1>
           <a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
         </div>
 
@@ -1823,6 +1847,10 @@ async function routeItemNew(matches) {
               <label for="item-desc">Description</label>
               <textarea id="item-desc" name="description" rows="2"></textarea>
             </div>
+
+            <div id="new-custom-cards" style="margin-top:var(--space-4)"></div>
+            <button type="button" id="btn-add-card" class="btn btn-ghost btn-sm" style="margin-bottom:var(--space-4)">+ Add custom card</button>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add item</button>
               <a href="/galaxies/${galaxyId}/items" data-link class="btn btn-secondary">Cancel</a>
@@ -1846,6 +1874,17 @@ async function routeItemNew(matches) {
     const display = document.getElementById('bg-id-display')
     if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
     else { display.hidden = true }
+  })
+
+  // ── Custom cards ─────────────────────────────────────────────────────────
+  const newUserCards = []
+  renderCustomCards(newUserCards, 'new-custom-cards')
+  bindCustomCards(newUserCards, 'new-custom-cards')
+  document.getElementById('btn-add-card').addEventListener('click', () => {
+    newUserCards.push({ name: '', fields: [{ label: '', value: '' }] })
+    renderCustomCards(newUserCards, 'new-custom-cards')
+    const inputs = document.querySelectorAll('.custom-card__name-input')
+    inputs[inputs.length - 1]?.focus()
   })
 
   // ── Duplicate item check ──────────────────────────────────────────────────
@@ -2011,6 +2050,9 @@ async function routeItemNew(matches) {
       }).filter(([, v]) => v != null))
     }
 
+    const cards = collectCustomCards(newUserCards)
+    if (cards.length) customFields._cards = cards
+
     try {
       const data = await api('POST', `/galaxies/${galaxyId}/items`, {
         name: e.target.name.value,
@@ -2133,6 +2175,16 @@ async function routeItem(matches) {
             </dl>
           </div>
         </div>` : ''}
+
+        ${(cf._cards ?? []).filter(c => c.fields?.length).map(c => `
+        <div class="card mb-4">
+          <div class="card-header"><h2 class="section-title" style="margin:0">${escapeHTML(c.name || 'Custom Fields')}</h2></div>
+          <div class="card-body">
+            <dl class="bgg-info-grid">
+              ${c.fields.map(f => `<dt>${escapeHTML(f.label)}</dt><dd>${escapeHTML(f.value)}</dd>`).join('')}
+            </dl>
+          </div>
+        </div>`).join('')}
 
         <div class="card mb-4">
           <div class="card-body">
@@ -2628,6 +2680,10 @@ async function routeItemEdit(matches) {
               <label for="item-desc">Description</label>
               <textarea id="item-desc" name="description" rows="2">${escapeHTML(item.description ?? '')}</textarea>
             </div>
+
+            <div id="edit-custom-cards" style="margin-top:var(--space-4)"></div>
+            <button type="button" id="btn-add-card" class="btn btn-ghost btn-sm" style="margin-bottom:var(--space-4)">+ Add custom card</button>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save changes</button>
               <a href="/galaxies/${galaxyId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
@@ -2649,6 +2705,20 @@ async function routeItemEdit(matches) {
     const display = document.getElementById('bg-id-display')
     if (id) { display.textContent = `BGG ID: ${id}`; display.hidden = false }
     else { display.hidden = true }
+  })
+
+  // ── Custom cards ─────────────────────────────────────────────────────────
+  const editUserCards = (cf._cards ?? []).map(c => ({
+    name: c.name ?? '',
+    fields: (c.fields ?? []).map(f => ({ label: f.label ?? '', value: f.value ?? '' })),
+  }))
+  renderCustomCards(editUserCards, 'edit-custom-cards')
+  bindCustomCards(editUserCards, 'edit-custom-cards')
+  document.getElementById('btn-add-card').addEventListener('click', () => {
+    editUserCards.push({ name: '', fields: [{ label: '', value: '' }] })
+    renderCustomCards(editUserCards, 'edit-custom-cards')
+    const inputs = document.querySelectorAll('.custom-card__name-input')
+    inputs[inputs.length - 1]?.focus()
   })
 
   document.getElementById('edit-item-form').addEventListener('submit', async e => {
@@ -2678,6 +2748,9 @@ async function routeItemEdit(matches) {
         weight:         weight ? { value: weight, unit: weightUnit } : undefined,
       }).filter(([, v]) => v != null))
     }
+
+    const editCards = collectCustomCards(editUserCards)
+    if (editCards.length) customFields._cards = editCards
 
     try {
       await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, {
@@ -3040,6 +3113,79 @@ function galaxyIcon(name) {
     if (pattern.test(n)) return icon
   }
   return '📦'
+}
+
+// ─── Custom cards UI ──────────────────────────────────────────────────────────
+
+function renderCustomCards(cards, containerId) {
+  const container = document.getElementById(containerId)
+  if (!container) return
+  container.innerHTML = cards.map((card, ci) => `
+    <div class="custom-card" data-card-index="${ci}">
+      <div class="custom-card__header">
+        <input type="text" class="custom-card__name-input" placeholder="Card title…" value="${escapeHTML(card.name)}" aria-label="Card title">
+        <button type="button" class="btn btn-ghost btn-sm custom-card__remove" data-card="${ci}" aria-label="Remove card">✕</button>
+      </div>
+      <div class="custom-card__fields">
+        ${card.fields.map((f, fi) => `
+          <div class="custom-card__field-row" data-field-index="${fi}">
+            <input type="text" class="custom-card__field-label" placeholder="Label" value="${escapeHTML(f.label)}" aria-label="Field label">
+            <input type="text" class="custom-card__field-value" placeholder="Value" value="${escapeHTML(f.value)}" aria-label="Field value">
+            <button type="button" class="btn btn-ghost btn-sm custom-card__field-remove" data-card="${ci}" data-field="${fi}" aria-label="Remove field">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm custom-card__add-field" data-card="${ci}">+ Add field</button>
+    </div>
+  `).join('')
+}
+
+function bindCustomCards(cards, containerId) {
+  const container = document.getElementById(containerId)
+  if (!container) return
+
+  container.addEventListener('input', e => {
+    const row = e.target.closest('[data-card-index]')
+    if (!row) return
+    const ci = Number(row.dataset.cardIndex)
+    if (e.target.classList.contains('custom-card__name-input')) {
+      cards[ci].name = e.target.value
+    } else if (e.target.classList.contains('custom-card__field-label')) {
+      const fi = Number(e.target.closest('[data-field-index]').dataset.fieldIndex)
+      cards[ci].fields[fi].label = e.target.value
+    } else if (e.target.classList.contains('custom-card__field-value')) {
+      const fi = Number(e.target.closest('[data-field-index]').dataset.fieldIndex)
+      cards[ci].fields[fi].value = e.target.value
+    }
+  })
+
+  container.addEventListener('click', e => {
+    const removeCard = e.target.closest('.custom-card__remove')
+    if (removeCard) {
+      cards.splice(Number(removeCard.dataset.card), 1)
+      renderCustomCards(cards, containerId)
+      return
+    }
+    const addField = e.target.closest('.custom-card__add-field')
+    if (addField) {
+      cards[Number(addField.dataset.card)].fields.push({ label: '', value: '' })
+      renderCustomCards(cards, containerId)
+      const newInputs = container.querySelectorAll('.custom-card__field-label')
+      newInputs[newInputs.length - 1]?.focus()
+      return
+    }
+    const removeField = e.target.closest('.custom-card__field-remove')
+    if (removeField) {
+      cards[Number(removeField.dataset.card)].fields.splice(Number(removeField.dataset.field), 1)
+      renderCustomCards(cards, containerId)
+    }
+  })
+}
+
+function collectCustomCards(cards) {
+  return cards
+    .map(c => ({ name: c.name.trim(), fields: c.fields.filter(f => f.label.trim() || f.value.trim()) }))
+    .filter(c => c.name || c.fields.length)
 }
 
 function parseBggId(url) {

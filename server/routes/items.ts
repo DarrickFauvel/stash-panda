@@ -65,6 +65,7 @@ router.get('/', requireAuth, async (req, res) => {
     const result = await db.execute({
       sql: `SELECT i.id, i.name, i.quantity, i.unit, i.item_type,
                    i.value, i.expiry_date, i.tags, i.updated_at,
+                   i.location_id,
                    c.name AS category_name, l.name AS location_name,
                    (SELECT url FROM item_photos WHERE item_id = i.id ORDER BY created_at ASC LIMIT 1) AS photo_url
             FROM items i
