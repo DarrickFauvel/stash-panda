@@ -164,6 +164,13 @@ input, select, textarea { font: inherit; }
   gap: var(--space-2);
 }
 
+.sticky-nav {
+  position: sticky;
+  top: var(--app-header-height);
+  z-index: 90;
+  background: var(--c-bg);
+}
+
 /* ─── User Avatar & Menu ─────────────────────────────────────────────────── */
 .user-avatar-wrap {
   position: relative;
