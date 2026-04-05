@@ -1911,14 +1911,18 @@ async function routeItemNew(matches) {
     { label: 'Add Item' },
   ])
 
-  const LOC_TYPE_ICON_NEW = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
-      .flatMap(n => [
-        `<option value="${n.id}"${n.id === preselectedLocationId ? ' selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
-        ...buildLocOptions(nodes, n.id, depth + 1),
-      ])
+      .flatMap(n => {
+        const label = n.location_type === 'room'
+          ? escapeHTML(n.name)
+          : computeLocLabel(n.id, nodes)
+        return [
+          `<option value="${n.id}"${n.id === preselectedLocationId ? ' selected' : ''}>${label}</option>`,
+          ...buildLocOptions(nodes, n.id, depth + 1),
+        ]
+      })
   }
   const locOptions = `<option value="">— None —</option>` + buildLocOptions(locations).join('')
   const catOptions = `<option value="">— None —</option>` +
@@ -2900,14 +2904,18 @@ async function routeItemEdit(matches) {
   const dim = cf.box_dimensions ?? {}
   const wt = cf.weight ?? {}
 
-  const LOC_TYPE_ICON_EDIT = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
-      .flatMap(n => [
-        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
-        ...buildLocOptions(nodes, n.id, depth + 1),
-      ])
+      .flatMap(n => {
+        const label = n.location_type === 'room'
+          ? escapeHTML(n.name)
+          : computeLocLabel(n.id, nodes)
+        return [
+          `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${label}</option>`,
+          ...buildLocOptions(nodes, n.id, depth + 1),
+        ]
+      })
   }
   const locOptions = `<option value="">— None —</option>` + buildLocOptions(locations).join('')
   const catOptions = `<option value="">— None —</option>` +
