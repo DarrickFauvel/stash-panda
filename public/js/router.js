@@ -2941,7 +2941,7 @@ async function routeItemEdit(matches) {
 
   setHTML(`
     <div>
-      <div class="page-header">
+      <div class="page-header page-header--sticky">
         <div class="page-header-row">
           <h1 class="page-title">Edit Item</h1>
           <span id="autosave-status" class="autosave-status" aria-live="polite"></span>
@@ -4013,6 +4013,11 @@ function applyTheme(theme) {
 initThemePicker()
 initWelcomeCanvas()
 render(location.pathname)
+
+// Track sticky-nav height so page-header--sticky can sit flush below it
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--sticky-nav-height', entry.contentRect.height + 'px')
+}).observe(document.querySelector('.sticky-nav'))
 
 // Expose globals for inline onclick handlers in dynamically rendered HTML
 window.navigate = navigate
