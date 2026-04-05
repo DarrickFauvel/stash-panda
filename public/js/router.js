@@ -1917,7 +1917,7 @@ async function routeItemNew(matches) {
       .flatMap(n => {
         const label = n.location_type === 'room'
           ? escapeHTML(n.name)
-          : '\u00a0\u00a0'.repeat(depth) + computeLocLabel(n.id, nodes)
+          : '\u00a0\u00a0'.repeat(depth) + computeLocLabel(n.id, nodes).split('-').pop()
         return [
           `<option value="${n.id}"${n.id === preselectedLocationId ? ' selected' : ''}>${label}</option>`,
           ...buildLocOptions(nodes, n.id, depth + 1),
@@ -2910,7 +2910,7 @@ async function routeItemEdit(matches) {
       .flatMap(n => {
         const label = n.location_type === 'room'
           ? escapeHTML(n.name)
-          : '\u00a0\u00a0'.repeat(depth) + computeLocLabel(n.id, nodes)
+          : '\u00a0\u00a0'.repeat(depth) + computeLocLabel(n.id, nodes).split('-').pop()
         return [
           `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${label}</option>`,
           ...buildLocOptions(nodes, n.id, depth + 1),
