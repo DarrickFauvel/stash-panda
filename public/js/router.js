@@ -1023,12 +1023,13 @@ async function routeGalaxy(matches) {
             } catch (err) { alert(err.message) }
           })
         })
-        container.querySelectorAll('.loc-node__name').forEach(nameEl => {
+        container.querySelectorAll('.loc-node__name, .loc-node__subname').forEach(nameEl => {
           nameEl.addEventListener('click', () => {
             const id = nameEl.dataset.id
+            const loc = locations.find(l => l.id === id)
+            nameEl.textContent = loc?.name ?? nameEl.textContent.trim()
             startInlineEdit(nameEl, async val => {
               await api('PATCH', `/galaxies/${galaxyId}/locations/${id}`, { name: val })
-              const loc = locations.find(l => l.id === id)
               if (loc) loc.name = val
               renderLocTree()
             })
@@ -1162,12 +1163,24 @@ async function routeGalaxy(matches) {
           const typeSelectHTML = LOC_TYPES.map(t2 =>
             `<option value="${t2.value}"${t2.value === node.location_type ? ' selected' : ''}>${t2.icon} ${t2.label}</option>`
           ).join('')
+          const isRoom = node.location_type === 'room'
+          const segLabel = computeLocLabel(node.id, locations).split('-').pop()
+          const typeLabel = (node.location_type ?? 'other').replace('_', ' ').toUpperCase()
+          const isGenericName = /^[\w\s]+-\d+$/i.test(node.name)
+          const showName = !isRoom && !isGenericName
           return `
           <div class="loc-node loc-depth-${depth}" data-id="${node.id}">
             <div class="loc-node__row" data-id="${node.id}">
               <span class="loc-drag-handle" data-id="${node.id}" aria-hidden="true">⠿</span>
-              <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
-              <span class="loc-label-badge">${computeLocLabel(node.id, locations)}</span>
+              <span class="loc-node__info">
+                <span class="location-row__primary">
+                  <span class="loc-label-badge loc-node__name editable-name" data-id="${node.id}" title="Click to rename">
+                    ${isRoom ? escapeHTML(node.name) : segLabel}
+                  </span>
+                  <span class="location-row__type">${typeLabel}</span>
+                </span>
+                ${showName ? `<span class="loc-node__subname editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>` : ''}
+              </span>
               <label class="loc-type-btn" title="Change type">
                 <span class="loc-type-btn__icon" aria-hidden="true">${t.icon}</span>
                 <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
@@ -1401,13 +1414,24 @@ async function routeLocations(matches) {
         const total = totalCount(node)
         const indent = depth * 1.25
         const icon = LOC_TYPE_ICON[node.location_type] ?? '📍'
-        const label = computeLocLabel(node.id, locations)
+        const isRoom = node.location_type === 'room'
+        const label = computeLocLabel(node.id, locations).split('-').pop()
+        const typeLabel = (node.location_type ?? 'other').replace('_', ' ').toUpperCase()
+        const isGenericName = /^[\w\s]+-\d+$/i.test(node.name)
+        const showName = !isRoom && !isGenericName
         return `
           <a href="/galaxies/${galaxyId}/locations/${node.id}" data-link
              class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
             <span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>
-            <span class="location-row__name">${escapeHTML(node.name)}</span>
-            <span class="loc-label-badge">${label}</span>
+            <span class="location-row__info">
+              <span class="location-row__primary">
+                ${isRoom
+                  ? `<span class="loc-label-badge">${escapeHTML(node.name)}</span>`
+                  : `<span class="loc-label-badge">${label}</span>`}
+                <span class="location-row__type">${typeLabel}</span>
+              </span>
+              ${showName ? `<span class="location-row__name">${escapeHTML(node.name)}</span>` : ''}
+            </span>
             <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
           </a>
           ${renderTree(node.children, depth + 1)}
@@ -1476,13 +1500,20 @@ async function routeLocation(matches) {
         <div class="card-header"><h2 class="section-title" style="margin:0">Sub-locations</h2></div>
         <div class="location-tree">
           ${children.map(c => {
-            const cLabel = computeLocLabel(c.id, allLocs)
+            const cLabel = computeLocLabel(c.id, allLocs).split('-').pop()
             const cnt = childCount(c.id)
             return `
             <a href="/galaxies/${galaxyId}/locations/${c.id}" data-link class="location-row">
               <span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>
-              <span class="location-row__name">${escapeHTML(c.name)}</span>
-              <span class="loc-label-badge">${cLabel}</span>
+              <span class="location-row__info">
+                <span class="location-row__primary">
+                  ${c.location_type === 'room'
+                    ? `<span class="loc-label-badge">${escapeHTML(c.name)}</span>`
+                    : `<span class="loc-label-badge">${cLabel}</span>`}
+                  <span class="location-row__type">${(c.location_type ?? 'other').replace('_', ' ').toUpperCase()}</span>
+                </span>
+                ${c.location_type !== 'room' && !/^[\w\s]+-\d+$/i.test(c.name) ? `<span class="location-row__name">${escapeHTML(c.name)}</span>` : ''}
+              </span>
               <span class="location-row__count">${cnt} item${cnt !== 1 ? 's' : ''}</span>
             </a>`
           }).join('')}
