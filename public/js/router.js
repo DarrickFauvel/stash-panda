@@ -107,6 +107,31 @@ function setNav(isLoggedIn) {
   })
 }
 
+// ─── Location label system ───────────────────────────────────────────────────
+// Each location type maps to a 2-letter code used in compound labels like SH01-LV02
+
+const LOC_TYPE_CODE = {
+  room: 'RM', closet: 'CL', shelf: 'SH', level: 'LV', section: 'SC',
+  drawer: 'DR', cabinet: 'CB', box: 'BX', banker_box: 'BB',
+  shoebox: 'SB', bin: 'BN', basket: 'BK', tote: 'TT', bag: 'BG', other: 'OT',
+}
+
+function computeLocLabel(locId, allLocs) {
+  const loc = allLocs.find(l => l.id === locId)
+  if (!loc) return ''
+  const code = LOC_TYPE_CODE[loc.location_type] ?? 'OT'
+  const siblings = allLocs
+    .filter(l => (l.parent_id ?? null) === (loc.parent_id ?? null) && l.location_type === loc.location_type)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const ordinal = String(siblings.findIndex(s => s.id === locId) + 1).padStart(2, '0')
+  const myCode = code + ordinal
+  if (loc.parent_id) {
+    const parentLabel = computeLocLabel(loc.parent_id, allLocs)
+    return parentLabel ? `${parentLabel}-${myCode}` : myCode
+  }
+  return myCode
+}
+
 // ─── Route handlers ──────────────────────────────────────────────────────────
 
 const routes = [
@@ -927,6 +952,8 @@ async function routeGalaxy(matches) {
         { value: 'room',       label: 'Room',       icon: '🚪' },
         { value: 'closet',     label: 'Closet',     icon: '🚪' },
         { value: 'shelf',      label: 'Shelf',      icon: '📚' },
+        { value: 'level',      label: 'Level',      icon: '📋' },
+        { value: 'section',    label: 'Section',    icon: '📂' },
         { value: 'drawer',     label: 'Drawer',     icon: '🗂️' },
         { value: 'cabinet',    label: 'Cabinet',    icon: '🗄️' },
         { value: 'box',        label: 'Box',        icon: '📦' },
@@ -1140,6 +1167,7 @@ async function routeGalaxy(matches) {
             <div class="loc-node__row" data-id="${node.id}">
               <span class="loc-drag-handle" data-id="${node.id}" aria-hidden="true">⠿</span>
               <span class="loc-node__name editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>
+              <span class="loc-label-badge">${computeLocLabel(node.id, locations)}</span>
               <label class="loc-type-btn" title="Change type">
                 <span class="loc-type-btn__icon" aria-hidden="true">${t.icon}</span>
                 <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
@@ -1365,7 +1393,7 @@ async function routeLocations(matches) {
       return Number(node.item_count ?? 0) + node.children.reduce((s, c) => s + totalCount(c), 0)
     }
 
-    const LOC_TYPE_ICON = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+    const LOC_TYPE_ICON = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
 
     function renderTree(nodes, depth = 0) {
       if (!nodes.length) return ''
@@ -1373,11 +1401,13 @@ async function routeLocations(matches) {
         const total = totalCount(node)
         const indent = depth * 1.25
         const icon = LOC_TYPE_ICON[node.location_type] ?? '📍'
+        const label = computeLocLabel(node.id, locations)
         return `
           <a href="/galaxies/${galaxyId}/locations/${node.id}" data-link
              class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
             <span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>
             <span class="location-row__name">${escapeHTML(node.name)}</span>
+            <span class="loc-label-badge">${label}</span>
             <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
           </a>
           ${renderTree(node.children, depth + 1)}
@@ -1434,7 +1464,7 @@ async function routeLocation(matches) {
     const parent = allLocs.find(l => l.id === current.parent_id)
     const items = itemsData?.items ?? []
     const typeIcon = { physical: '📦', digital: '💾', subscription: '🔄', document: '📄', boardgame: '🎲' }
-    const locTypeIcon = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+    const locTypeIcon = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
 
     // Count items for each child (direct only shown in badge, totals would need recursion)
     function childCount(locId) {
@@ -1445,13 +1475,17 @@ async function routeLocation(matches) {
       <div class="card mb-4">
         <div class="card-header"><h2 class="section-title" style="margin:0">Sub-locations</h2></div>
         <div class="location-tree">
-          ${children.map(c => `
+          ${children.map(c => {
+            const cLabel = computeLocLabel(c.id, allLocs)
+            const cnt = childCount(c.id)
+            return `
             <a href="/galaxies/${galaxyId}/locations/${c.id}" data-link class="location-row">
               <span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>
               <span class="location-row__name">${escapeHTML(c.name)}</span>
-              <span class="location-row__count">${childCount(c.id)} item${childCount(c.id) !== 1 ? 's' : ''}</span>
-            </a>
-          `).join('')}
+              <span class="loc-label-badge">${cLabel}</span>
+              <span class="location-row__count">${cnt} item${cnt !== 1 ? 's' : ''}</span>
+            </a>`
+          }).join('')}
         </div>
       </div>` : ''
 
@@ -1501,10 +1535,11 @@ async function routeLocation(matches) {
       { label: current.name },
     ])
 
+    const currentLabel = computeLocLabel(current.id, allLocs)
     setHTML(`
       <div>
         <div class="page-header">
-          <h1 class="page-title">${locTypeIcon[current.location_type] ?? '📍'} ${escapeHTML(current.name)}</h1>
+          <h1 class="page-title">${locTypeIcon[current.location_type] ?? '📍'} ${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
         </div>
         ${sublocsHTML}
         ${itemsHTML}
@@ -1575,7 +1610,7 @@ async function routeItems(matches) {
             }
             <div class="item-row__info">
               <div class="item-row__name">${escapeHTML(item.name)}</div>
-              <div class="item-row__meta">${escapeHTML(item.location_id ? locationPath(item.location_id) : (item.category_name ?? item.item_type))}</div>
+              <div class="item-row__meta">${item.location_id ? `${escapeHTML(locationPath(item.location_id))} <span class="loc-label-badge" style="font-size:0.6rem">${computeLocLabel(item.location_id, allLocations)}</span>` : escapeHTML(item.category_name ?? item.item_type)}</div>
             </div>
             <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
           </a>
@@ -1701,12 +1736,12 @@ async function routeItemNew(matches) {
     { label: 'Add Item' },
   ])
 
-  const LOC_TYPE_ICON_NEW = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+  const LOC_TYPE_ICON_NEW = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ${escapeHTML(n.name)}</option>`,
+        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }
@@ -1843,7 +1878,7 @@ async function routeItemNew(matches) {
               </div>
             </div>
 
-            <div class="field">
+            <div class="field" style="margin-top:var(--space-6)">
               <label for="item-desc">Description</label>
               <textarea id="item-desc" name="description" rows="2"></textarea>
             </div>
@@ -2083,18 +2118,23 @@ async function routeItem(matches) {
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   try {
-    const [data, invData] = await Promise.all([
+    const [data, invData, locData] = await Promise.all([
       api('GET', `/galaxies/${galaxyId}/items/${itemId}`),
       api('GET', `/galaxies/${galaxyId}`),
+      api('GET', `/galaxies/${galaxyId}/locations`),
     ])
     if (!data) return
     const { item, photos } = data
 
+    const locById = Object.fromEntries((locData?.locations ?? []).map(l => [l.id, l]))
+    const locationAncestors = []
+    let cur = locById[item.location_id]
+    while (cur) { locationAncestors.unshift(cur); cur = locById[cur.parent_id] }
+
     setBreadcrumb([
       { label: 'Galaxies', href: '/galaxies' },
       { label: invData?.galaxy?.name ?? '', href: `/galaxies/${galaxyId}` },
-      { label: 'Items', href: `/galaxies/${galaxyId}/items` },
-      { label: item.name },
+      ...locationAncestors.map(l => ({ label: l.name, href: `/galaxies/${galaxyId}/locations/${l.id}` })),
     ])
 
     function photosHTML(photoList) {
@@ -2547,12 +2587,12 @@ async function routeItemEdit(matches) {
   const dim = cf.box_dimensions ?? {}
   const wt = cf.weight ?? {}
 
-  const LOC_TYPE_ICON_EDIT = { room:'🚪', closet:'🚪', shelf:'📚', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
+  const LOC_TYPE_ICON_EDIT = { room:'🚪', closet:'🚪', shelf:'📚', level:'📋', section:'📂', drawer:'🗂️', cabinet:'🗄️', box:'📦', banker_box:'🗃️', shoebox:'👟', bin:'🪣', basket:'🧺', tote:'🛍️', bag:'👜', other:'📍' }
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ${escapeHTML(n.name)}</option>`,
+        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }

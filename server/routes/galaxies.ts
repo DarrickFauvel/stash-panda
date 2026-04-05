@@ -333,7 +333,7 @@ router.get('/:id/locations', requireAuth, async (req, res) => {
   }
 })
 
-const VALID_LOCATION_TYPES = ['room','shelf','drawer','cabinet','closet','box','banker_box','shoebox','bin','basket','tote','bag','other']
+const VALID_LOCATION_TYPES = ['room','shelf','level','section','drawer','cabinet','closet','box','banker_box','shoebox','bin','basket','tote','bag','other']
 
 // POST /api/galaxies/:id/locations
 router.post('/:id/locations', requireAuth, async (req, res) => {
