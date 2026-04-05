@@ -107,6 +107,23 @@ function setNav(isLoggedIn) {
   })
 }
 
+// ─── User preferences (localStorage) ────────────────────────────────────────
+
+export const prefs = {
+  _key: 'sp_prefs',
+  _data: null,
+  _load() {
+    if (!this._data) {
+      try { this._data = JSON.parse(localStorage.getItem(this._key) ?? '{}') } catch { this._data = {} }
+    }
+    return this._data
+  },
+  get(key, def) { return this._load()[key] ?? def },
+  set(key, val) { this._data = { ...this._load(), [key]: val }; localStorage.setItem(this._key, JSON.stringify(this._data)) },
+  get locIcons() { return this.get('locIcons', true) },
+  set locIcons(v) { this.set('locIcons', v) },
+}
+
 // ─── Location label system ───────────────────────────────────────────────────
 // Each location type maps to a 2-letter code used in compound labels like SH01-LV02
 
@@ -869,6 +886,29 @@ async function routeGalaxy(matches) {
             </form>
           </div>
         </div>
+
+        <div id="add-child-loc-modal" class="modal-overlay" hidden>
+          <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="add-child-loc-modal-title">
+            <div class="modal-dialog__header">
+              <h3 class="font-semi" id="add-child-loc-modal-title">New sub-location</h3>
+              <button class="modal-dialog__close" id="add-child-loc-close" aria-label="Close">×</button>
+            </div>
+            <form id="add-child-loc-form" class="modal-dialog__body">
+              <div class="field">
+                <label for="add-child-loc-name">Name</label>
+                <input type="text" id="add-child-loc-name" placeholder="e.g. Level 1" maxlength="80" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="add-child-loc-type">Type</label>
+                <select id="add-child-loc-type"></select>
+              </div>
+              <div class="modal-dialog__footer">
+                <button type="button" class="btn btn-ghost" id="add-child-loc-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add sub-location</button>
+              </div>
+            </form>
+          </div>
+        </div>
         ` : ''}
 
         <!-- Members -->
@@ -966,7 +1006,7 @@ async function routeGalaxy(matches) {
         { value: 'other',      label: 'Other',      icon: '📍' },
       ]
       const locTypeMap = Object.fromEntries(LOC_TYPES.map(t => [t.value, t]))
-      const locTypeOptions = LOC_TYPES.map(t => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join('')
+      const locTypeOptions = LOC_TYPES.map(t => `<option value="${t.value}">${prefs.locIcons ? `${t.icon} ` : ''}${t.label}</option>`).join('')
 
       function buildTree(nodes, parentId = null) {
         return nodes
@@ -1048,10 +1088,15 @@ async function routeGalaxy(matches) {
         })
         container.querySelectorAll('.loc-add-child-btn').forEach(btn => {
           btn.addEventListener('click', () => {
-            const form = container.querySelector(`.loc-child-form[data-parent="${btn.dataset.parent}"]`)
-            if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input[name="loc-name"]').focus() }
+            const parentId = btn.dataset.parent
+            const parentName = locations.find(l => l.id === parentId)?.name ?? ''
+            document.getElementById('add-child-loc-modal-title').textContent = `Add to ${parentName}`
+            document.getElementById('add-child-loc-modal').dataset.parent = parentId
+            document.getElementById('add-child-loc-modal').removeAttribute('hidden')
+            document.getElementById('add-child-loc-name').focus()
           })
         })
+        // dead code kept for safety — inline forms removed
         container.querySelectorAll('.loc-child-form').forEach(form => {
           form.addEventListener('submit', async e => {
             e.preventDefault()
@@ -1161,7 +1206,7 @@ async function routeGalaxy(matches) {
         return nodes.map(node => {
           const t = locTypeMap[node.location_type] ?? locTypeMap['room']
           const typeSelectHTML = LOC_TYPES.map(t2 =>
-            `<option value="${t2.value}"${t2.value === node.location_type ? ' selected' : ''}>${t2.icon} ${t2.label}</option>`
+            `<option value="${t2.value}"${t2.value === node.location_type ? ' selected' : ''}>${prefs.locIcons ? `${t2.icon} ` : ''}${t2.label}</option>`
           ).join('')
           const isRoom = node.location_type === 'room'
           const segLabel = computeLocLabel(node.id, locations).split('-').pop()
@@ -1182,17 +1227,12 @@ async function routeGalaxy(matches) {
                 ${showName ? `<span class="loc-node__subname editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>` : ''}
               </span>
               <label class="loc-type-btn" title="Change type">
-                <span class="loc-type-btn__icon" aria-hidden="true">${t.icon}</span>
+                <span class="loc-type-btn__icon" aria-hidden="true">${prefs.locIcons ? t.icon : (LOC_TYPE_CODE[node.location_type] ?? 'OT')}</span>
                 <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
               </label>
               <button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}" title="Add child location" aria-label="Add child location">+</button>
               <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" title="Delete" aria-label="Delete location">×</button>
             </div>
-            <form class="inline-add-form loc-child-form mt-1 mb-1" data-parent="${node.id}" hidden>
-              <input type="text" name="loc-name" placeholder="Name…" maxlength="80">
-              <select name="loc-type" class="loc-form-type-select">${locTypeOptions}</select>
-              <button type="submit" class="btn btn-secondary btn-sm">Add</button>
-            </form>
             ${node.children.length ? `<div class="loc-children">${renderNodes(node.children, depth + 1)}</div>` : ''}
           </div>
         `}).join('')
@@ -1221,6 +1261,29 @@ async function routeGalaxy(matches) {
           })
           if (data) { locations.push(data.location); renderLocTree() }
           closeAddLoc()
+        } catch (err) { alert(err.message) }
+      })
+
+      const addChildLocModal = document.getElementById('add-child-loc-modal')
+      const closeAddChildLoc = () => { addChildLocModal.setAttribute('hidden', ''); document.getElementById('add-child-loc-form').reset() }
+      document.getElementById('add-child-loc-close').addEventListener('click', closeAddChildLoc)
+      document.getElementById('add-child-loc-cancel').addEventListener('click', closeAddChildLoc)
+      addChildLocModal.addEventListener('click', e => { if (e.target === addChildLocModal) closeAddChildLoc() })
+      document.getElementById('add-child-loc-type').innerHTML = locTypeOptions
+
+      document.getElementById('add-child-loc-form').addEventListener('submit', async e => {
+        e.preventDefault()
+        const name = document.getElementById('add-child-loc-name').value.trim()
+        const parentId = addChildLocModal.dataset.parent
+        if (!name) return
+        try {
+          const data = await api('POST', `/galaxies/${galaxyId}/locations`, {
+            name,
+            location_type: document.getElementById('add-child-loc-type').value,
+            parent_id: parentId,
+          })
+          if (data) { locations.push(data.location); renderLocTree() }
+          closeAddChildLoc()
         } catch (err) { alert(err.message) }
       })
 
@@ -1422,7 +1485,7 @@ async function routeLocations(matches) {
         return `
           <a href="/galaxies/${galaxyId}/locations/${node.id}" data-link
              class="location-row" style="padding-left:calc(var(--space-4) + ${indent}rem)">
-            <span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>
+            ${prefs.locIcons ? `<span class="location-row__icon" style="font-size:1rem;margin-right:.35rem">${icon}</span>` : ''}
             <span class="location-row__info">
               <span class="location-row__primary">
                 ${isRoom
@@ -1504,7 +1567,7 @@ async function routeLocation(matches) {
             const cnt = childCount(c.id)
             return `
             <a href="/galaxies/${galaxyId}/locations/${c.id}" data-link class="location-row">
-              <span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>
+              ${prefs.locIcons ? `<span style="font-size:1rem;margin-right:.35rem">${locTypeIcon[c.location_type] ?? '📍'}</span>` : ''}
               <span class="location-row__info">
                 <span class="location-row__primary">
                   ${c.location_type === 'room'
@@ -1570,7 +1633,7 @@ async function routeLocation(matches) {
     setHTML(`
       <div>
         <div class="page-header">
-          <h1 class="page-title">${locTypeIcon[current.location_type] ?? '📍'} ${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
+          <h1 class="page-title">${prefs.locIcons ? `${locTypeIcon[current.location_type] ?? '📍'} ` : ''}${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
         </div>
         ${sublocsHTML}
         ${itemsHTML}
@@ -1772,7 +1835,7 @@ async function routeItemNew(matches) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
+        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }
@@ -2623,7 +2686,7 @@ async function routeItemEdit(matches) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
+        `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_EDIT[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }
@@ -2898,6 +2961,16 @@ function routeProfile() {
         </div>
       </div>
 
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Preferences</h2>
+          <label class="toggle-row">
+            <span class="toggle-row__label">Show location icons</span>
+            <input type="checkbox" id="pref-loc-icons" class="toggle-checkbox" ${prefs.locIcons ? 'checked' : ''}>
+          </label>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-body">
           <button class="btn btn-danger btn-sm" id="btn-signout">Sign out</button>
@@ -2905,6 +2978,10 @@ function routeProfile() {
       </div>
     </div>
   `)
+
+  document.getElementById('pref-loc-icons').addEventListener('change', e => {
+    prefs.locIcons = e.target.checked
+  })
 
   document.getElementById('btn-signout').addEventListener('click', () => {
     auth.clear()
