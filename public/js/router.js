@@ -2942,7 +2942,10 @@ async function routeItemEdit(matches) {
   setHTML(`
     <div>
       <div class="page-header">
-        <h1 class="page-title">Edit Item</h1>
+        <div class="page-header-row">
+          <h1 class="page-title">Edit Item</h1>
+          <span id="autosave-status" class="autosave-status" aria-live="polite"></span>
+        </div>
       </div>
       <div class="card">
         <div class="card-body">
@@ -3068,8 +3071,7 @@ async function routeItemEdit(matches) {
             </div>
 
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Save changes</button>
-              <a href="/galaxies/${galaxyId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
+              <a href="/galaxies/${galaxyId}/items/${itemId}" data-link class="btn btn-secondary">← Done</a>
             </div>
           </form>
         </div>
@@ -3104,22 +3106,31 @@ async function routeItemEdit(matches) {
     inputs[inputs.length - 1]?.focus()
   })
 
-  document.getElementById('edit-item-form').addEventListener('submit', async e => {
-    e.preventDefault()
-    const btn = e.target.querySelector('[type=submit]')
-    const errEl = document.getElementById('form-error')
-    errEl.innerHTML = ''
-    btn.disabled = true
+  // ── Auto-save ──────────────────────────────────────────────────────────────
+  const statusEl = document.getElementById('autosave-status')
+  let fadeTimer = null
 
+  function showSaveStatus(state, msg) {
+    clearTimeout(fadeTimer)
+    statusEl.className = 'autosave-status autosave-status--' + state
+    statusEl.textContent = msg
+    if (state === 'saved') {
+      fadeTimer = setTimeout(() => {
+        statusEl.classList.add('autosave-status--fade')
+        setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'autosave-status' }, 350)
+      }, 1800)
+    }
+  }
+
+  function collectFormData() {
+    const f = document.getElementById('edit-item-form')
     let customFields = {}
-    if (e.target.item_type.value === 'boardgame') {
-      const num = name => { const v = Number(e.target[name]?.value); return v || undefined }
-      const str = name => e.target[name]?.value.trim() || undefined
+    if (f.item_type.value === 'boardgame') {
+      const num = n => { const v = Number(f[n]?.value); return v || undefined }
+      const str = n => f[n]?.value.trim() || undefined
       const dimL = num('bg_dim_l'), dimW = num('bg_dim_w'), dimH = num('bg_dim_h')
-      const dimUnit = str('bg_dim_unit')
-      const weight = num('bg_weight'), weightUnit = str('bg_weight_unit')
       customFields = Object.fromEntries(Object.entries({
-        bgg_id:           parseBggId(e.target.bg_url?.value ?? '') ?? undefined,
+        bgg_id:           parseBggId(f.bg_url?.value ?? '') ?? undefined,
         year_published:   num('bg_year'),
         min_players:      num('bg_min_players'),
         max_players:      num('bg_max_players'),
@@ -3127,32 +3138,59 @@ async function routeItemEdit(matches) {
         min_age:          num('bg_min_age'),
         publisher:        str('bg_publisher'),
         designer:         str('bg_designer'),
-        box_dimensions: (dimL || dimW || dimH) ? { l: dimL, w: dimW, h: dimH, unit: dimUnit } : undefined,
-        weight:         weight ? { value: weight, unit: weightUnit } : undefined,
+        box_dimensions: (dimL || dimW || dimH) ? { l: dimL, w: dimW, h: dimH, unit: str('bg_dim_unit') } : undefined,
+        weight:         num('bg_weight') ? { value: num('bg_weight'), unit: str('bg_weight_unit') } : undefined,
       }).filter(([, v]) => v != null))
     }
-
     const editCards = collectCustomCards(editUserCards)
     if (editCards.length) customFields._cards = editCards
-
-    try {
-      await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, {
-        name:        e.target.name.value,
-        quantity:    Number(e.target.quantity.value),
-        unit:        e.target.unit.value || null,
-        location_id: e.target.location_id?.value || null,
-        category_id: e.target.category_id?.value || null,
-        item_type:   e.target.item_type.value,
-        description: e.target.description.value || null,
-        custom_fields: customFields,
-        disposition: e.target.disposition.value || null,
-      })
-      navigate(`/galaxies/${galaxyId}/items/${itemId}`)
-    } catch (err) {
-      errEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
-      btn.disabled = false
+    return {
+      name:          f.name.value,
+      quantity:      Number(f.quantity.value),
+      unit:          f.unit.value || null,
+      location_id:   f.location_id?.value || null,
+      category_id:   f.category_id?.value || null,
+      item_type:     f.item_type.value,
+      description:   f.description.value || null,
+      custom_fields: customFields,
+      disposition:   f.disposition.value || null,
     }
-  })
+  }
+
+  async function autoSave(triggerEl) {
+    const f = document.getElementById('edit-item-form')
+    if (!f.name.value.trim()) return
+    showSaveStatus('saving', 'Saving…')
+    try {
+      await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, collectFormData())
+      showSaveStatus('saved', '✓ Saved')
+      const field = triggerEl?.closest('.field')
+      if (field) {
+        field.classList.add('field--saved-flash')
+        setTimeout(() => field.classList.remove('field--saved-flash'), 900)
+      }
+      document.getElementById('form-error').innerHTML = ''
+    } catch (err) {
+      showSaveStatus('error', '⚠ Not saved')
+      document.getElementById('form-error').innerHTML =
+        `<div class="alert alert-error mb-4">${err.message}</div>`
+    }
+  }
+
+  const editForm = document.getElementById('edit-item-form')
+  editForm.addEventListener('submit', e => e.preventDefault())
+
+  // Text inputs + textareas → save on blur
+  editForm.querySelectorAll('input[type="text"], input[type="number"], input[type="url"], textarea')
+    .forEach(el => el.addEventListener('blur', () => autoSave(el)))
+
+  // Selects → save on change
+  editForm.querySelectorAll('select')
+    .forEach(el => el.addEventListener('change', () => autoSave(el)))
+
+  // Quantity stepper buttons → save after value update
+  editForm.querySelectorAll('quantity-stepper button')
+    .forEach(btn => btn.addEventListener('click', () => setTimeout(() => autoSave(btn), 0)))
 }
 
 function routeProfile() {

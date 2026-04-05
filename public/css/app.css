@@ -411,6 +411,26 @@ input, select, textarea { font: inherit; }
 
 .field + .field { margin-top: var(--space-4); }
 
+.field--saved-flash input,
+.field--saved-flash select,
+.field--saved-flash textarea {
+  transition: box-shadow 0.15s, border-color 0.15s;
+  border-color: var(--c-brand) !important;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+}
+
+/* Auto-save status indicator */
+.autosave-status {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.03em;
+  transition: opacity 0.35s;
+}
+.autosave-status--saving { color: var(--c-text-muted); }
+.autosave-status--saved  { color: var(--c-brand); }
+.autosave-status--error  { color: var(--c-danger, #f87171); }
+.autosave-status--fade   { opacity: 0; }
+
 label {
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
