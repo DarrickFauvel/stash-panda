@@ -892,7 +892,7 @@ async function routeGalaxy(matches) {
                 · <span class="badge ${roleBadgeClass[galaxy.role]}">${roleLabel[galaxy.role]}</span>
               </p>
             </div>
-            ${canEdit ? `<a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary btn-sm">+ Add item</a>` : ''}
+            ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="openAddItemModal('${galaxyId}','')">+ Add item</button>` : ''}
           </div>
         </div>
 
@@ -1570,7 +1570,7 @@ async function routeLocations(matches) {
             </span>
             <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
             <button type="button" class="btn btn-ghost btn-sm location-row__add-item" title="Add item here"
-              onclick="event.preventDefault();event.stopPropagation();navigate('/galaxies/${galaxyId}/items/new?location=${node.id}')">+</button>
+              onclick="event.preventDefault();event.stopPropagation();openAddItemModal('${galaxyId}','${node.id}')">+</button>
           </a>
           ${renderTree(node.children, depth + 1)}
         `
@@ -1710,7 +1710,7 @@ async function routeLocation(matches) {
         <div class="page-header">
           <div class="page-header-row">
             <h1 class="page-title">${prefs.locIcons ? `${locTypeIcon[current.location_type] ?? '📍'} ` : ''}${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
-            <a href="/galaxies/${galaxyId}/items/new?location=${locationId}" data-link class="btn btn-primary btn-sm">+ Add Item</a>
+            <button class="btn btn-primary btn-sm" onclick="openAddItemModal('${galaxyId}','${locationId}')">+ Add Item</button>
           </div>
         </div>
         ${sublocsHTML}
@@ -1794,7 +1794,7 @@ async function routeItems(matches) {
       <div>
         <div class="page-header page-header-row">
           <h1 class="page-title">Items<span class="galaxy-row__type-label" style="font-size:0.55em;vertical-align:baseline">${escapeHTML(galaxy.name)} galaxy</span></h1>
-          <a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary btn-sm">+ Add</a>
+          <button class="btn btn-primary btn-sm" onclick="openAddItemModal('${galaxyId}','')">+ Add</button>
         </div>
 
         ${allItems.length > 0 ? `
@@ -1829,7 +1829,7 @@ async function routeItems(matches) {
                 <div class="empty-state__icon">✨</div>
                 <div class="empty-state__title">Nothing stashed yet</div>
                 <div class="empty-state__body">Add your first item to start tracking.</div>
-                <a href="/galaxies/${galaxyId}/items/new" data-link class="btn btn-primary">Add item</a>
+                <button class="btn btn-primary" onclick="openAddItemModal('${galaxyId}','')">Add item</button>
               </div>`
             : renderList(allItems)
           }
@@ -1891,7 +1891,9 @@ async function routeItems(matches) {
 async function routeItemNew(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
   const galaxyId = matches[1]
-  const preselectedLocationId = new URLSearchParams(window.location.search).get('location') ?? ''
+  const urlParams = new URLSearchParams(window.location.search)
+  const preselectedLocationId = urlParams.get('location') ?? ''
+  const preselectedBarcode = urlParams.get('barcode') ?? ''
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   const [invData, locData, catData] = await Promise.all([
@@ -2151,6 +2153,11 @@ async function routeItemNew(matches) {
     }, 350)
   })
 
+  // ── Pre-fill from modal capture ───────────────────────────────────────────
+  // (consume module-level state set by openAddItemModal before any async work)
+  const capturedPhoto = window.pendingItemPhoto ?? null
+  window.pendingItemPhoto = null
+
   // ── Photo selection ───────────────────────────────────────────────────────
   let pendingPhotoFile = null
   let photoStream = null
@@ -2204,6 +2211,9 @@ async function routeItemNew(matches) {
     document.getElementById('new-item-photo-preview').style.display = 'none'
     document.getElementById('new-item-photo-name').textContent = ''
   })
+
+  // Pre-populate photo captured from the add-item modal
+  if (capturedPhoto) setPhotoPreview(capturedPhoto, 'Camera photo')
 
   // ── Barcode scanning & lookup ─────────────────────────────────────────────
   let productImageUrl = null
@@ -2304,6 +2314,12 @@ async function routeItemNew(matches) {
       barcodeStatus.textContent = err.message ?? 'Lookup failed'
       barcodeStatus.style.color = 'var(--c-danger)'
     }
+  }
+
+  // Auto-lookup barcode passed from the add-item modal
+  if (preselectedBarcode) {
+    barcodeInput.value = preselectedBarcode
+    lookupBarcode(preselectedBarcode)
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -3464,6 +3480,271 @@ window.addEventListener('popstate', () => {
   doRender(path, direction)
 })
 
+// ─── Add Item modal ───────────────────────────────────────────────────────────
+
+function openAddItemModal(galaxyId, locationId = '') {
+  const overlay = document.createElement('div')
+  overlay.className = 'aim-overlay'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-modal', 'true')
+  overlay.setAttribute('aria-label', 'Add item')
+
+  let aimStream = null
+  let aimScanRaf = null
+
+  function stopAimCamera() {
+    if (aimScanRaf) { cancelAnimationFrame(aimScanRaf); aimScanRaf = null }
+    if (aimStream) { aimStream.getTracks().forEach(t => t.stop()); aimStream = null }
+  }
+
+  function closeModal() {
+    stopAimCamera()
+    document.removeEventListener('keydown', onKey)
+    overlay.remove()
+  }
+
+  function onKey(e) { if (e.key === 'Escape') closeModal() }
+  document.addEventListener('keydown', onKey)
+
+  function buildFormUrl(extra = {}) {
+    const p = new URLSearchParams()
+    if (locationId) p.set('location', locationId)
+    for (const [k, v] of Object.entries(extra)) p.set(k, v)
+    return `/galaxies/${galaxyId}/items/new?${p}`
+  }
+
+  function renderMethods() {
+    overlay.innerHTML = `
+      <div class="aim-modal">
+        <div class="aim-header">
+          <h2 class="aim-title">Add Item</h2>
+          <button class="aim-close" aria-label="Close">×</button>
+        </div>
+        <div class="aim-methods">
+          <button class="aim-method" data-method="photo">
+            <span class="aim-method__icon">📷</span>
+            <span class="aim-method__label">Take Photo</span>
+            <span class="aim-method__desc">Capture the object with your camera</span>
+          </button>
+          <button class="aim-method" data-method="scan">
+            <span class="aim-method__icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="7" y2="12.01"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="17" y1="12" x2="17" y2="12.01"/></svg>
+            </span>
+            <span class="aim-method__label">Scan Barcode</span>
+            <span class="aim-method__desc">Point your camera at a barcode</span>
+          </button>
+          <button class="aim-method" data-method="type">
+            <span class="aim-method__icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 10h2m2 0h4M8 14h4"/></svg>
+            </span>
+            <span class="aim-method__label">Type Barcode</span>
+            <span class="aim-method__desc">Enter a UPC or barcode number</span>
+          </button>
+          <button class="aim-method" data-method="manual">
+            <span class="aim-method__icon">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <span class="aim-method__label">Manual Entry</span>
+            <span class="aim-method__desc">Fill in item details yourself</span>
+          </button>
+        </div>
+      </div>
+    `
+    overlay.querySelector('.aim-close').addEventListener('click', closeModal)
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal() })
+    overlay.querySelectorAll('.aim-method').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = btn.dataset.method
+        if (m === 'manual') { closeModal(); navigate(buildFormUrl()) }
+        else if (m === 'type') renderTypeBarcode()
+        else if (m === 'scan') renderScanBarcode()
+        else if (m === 'photo') renderPhotoCapture()
+      })
+    })
+  }
+
+  function backBtn() {
+    return `<button class="aim-back" aria-label="Back to methods">←</button>`
+  }
+
+  function bindBack() {
+    overlay.querySelector('.aim-back')?.addEventListener('click', () => {
+      stopAimCamera()
+      renderMethods()
+    })
+  }
+
+  function renderTypeBarcode() {
+    overlay.querySelector('.aim-modal').innerHTML = `
+      <div class="aim-header">
+        ${backBtn()}
+        <h2 class="aim-title">Type Barcode</h2>
+        <button class="aim-close" aria-label="Close">×</button>
+      </div>
+      <div class="aim-body">
+        <p class="aim-hint">Enter the barcode number to look up the product automatically.</p>
+        <div class="aim-barcode-row">
+          <input type="text" id="aim-bc-input" inputmode="numeric" placeholder="e.g. 012345678901" autocomplete="off" class="aim-input">
+          <button class="btn btn-primary" id="aim-bc-lookup">Look up</button>
+        </div>
+        <div id="aim-bc-status" class="aim-status"></div>
+        <button class="btn btn-primary aim-proceed-btn" id="aim-proceed" hidden>Continue to form →</button>
+      </div>
+    `
+    overlay.querySelector('.aim-close').addEventListener('click', closeModal)
+    bindBack()
+
+    const input = overlay.querySelector('#aim-bc-input')
+    const statusEl = overlay.querySelector('#aim-bc-status')
+    const proceedBtn = overlay.querySelector('#aim-proceed')
+    let resolvedBarcode = ''
+
+    async function doLookup() {
+      const upc = input.value.trim()
+      if (!upc) return
+      statusEl.textContent = 'Looking up…'
+      statusEl.className = 'aim-status'
+      try {
+        const data = await api('GET', `/barcode/${upc}`)
+        resolvedBarcode = upc
+        statusEl.textContent = data?.name ? `✓ Found: ${data.name}` : '✓ Product found'
+        statusEl.className = 'aim-status aim-status--ok'
+      } catch (err) {
+        statusEl.textContent = `Not found — you can still continue and fill in details manually`
+        statusEl.className = 'aim-status aim-status--warn'
+        resolvedBarcode = upc
+      }
+      proceedBtn.hidden = false
+    }
+
+    overlay.querySelector('#aim-bc-lookup').addEventListener('click', doLookup)
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doLookup() } })
+    proceedBtn.addEventListener('click', () => {
+      closeModal()
+      navigate(buildFormUrl(resolvedBarcode ? { barcode: resolvedBarcode } : {}))
+    })
+    setTimeout(() => input.focus(), 50)
+  }
+
+  async function renderScanBarcode() {
+    if (!('BarcodeDetector' in window)) {
+      renderTypeBarcode()
+      return
+    }
+    overlay.querySelector('.aim-modal').innerHTML = `
+      <div class="aim-header">
+        ${backBtn()}
+        <h2 class="aim-title">Scan Barcode</h2>
+        <button class="aim-close" aria-label="Close">×</button>
+      </div>
+      <div class="aim-body aim-body--camera">
+        <video id="aim-scan-video" autoplay playsinline muted class="aim-camera-feed"></video>
+        <div class="aim-scan-overlay" aria-hidden="true">
+          <div class="aim-scan-frame"></div>
+        </div>
+        <p id="aim-scan-status" class="aim-camera-status">Starting camera…</p>
+      </div>
+    `
+    overlay.querySelector('.aim-close').addEventListener('click', closeModal)
+    bindBack()
+
+    const video = overlay.querySelector('#aim-scan-video')
+    const statusEl = overlay.querySelector('#aim-scan-status')
+
+    try {
+      aimStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      video.srcObject = aimStream
+      statusEl.textContent = 'Point at a barcode…'
+      const detector = new BarcodeDetector({
+        formats: ['upc_a', 'upc_e', 'ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'codabar'],
+      })
+      async function tick() {
+        if (!aimStream) return
+        try {
+          const results = await detector.detect(video)
+          if (results.length) {
+            stopAimCamera()
+            const upc = results[0].rawValue
+            closeModal()
+            navigate(buildFormUrl({ barcode: upc }))
+            return
+          }
+        } catch {}
+        aimScanRaf = requestAnimationFrame(tick)
+      }
+      aimScanRaf = requestAnimationFrame(tick)
+    } catch {
+      statusEl.textContent = 'Camera access denied — try typing the barcode instead.'
+    }
+  }
+
+  async function renderPhotoCapture() {
+    overlay.querySelector('.aim-modal').innerHTML = `
+      <div class="aim-header">
+        ${backBtn()}
+        <h2 class="aim-title">Take Photo</h2>
+        <button class="aim-close" aria-label="Close">×</button>
+      </div>
+      <div class="aim-body aim-body--camera">
+        <video id="aim-photo-video" autoplay playsinline muted class="aim-camera-feed"></video>
+        <canvas id="aim-photo-canvas" style="display:none"></canvas>
+        <p id="aim-photo-status" class="aim-camera-status">Starting camera…</p>
+        <button class="aim-capture-btn" id="aim-capture-btn" disabled aria-label="Capture photo">
+          <span class="aim-capture-btn__ring"></span>
+        </button>
+      </div>
+      <div class="aim-photo-fallback">
+        <label class="aim-photo-fallback__btn">
+          Or choose from library
+          <input type="file" id="aim-photo-file" accept="image/*" style="display:none">
+        </label>
+      </div>
+    `
+    overlay.querySelector('.aim-close').addEventListener('click', closeModal)
+    bindBack()
+
+    const video = overlay.querySelector('#aim-photo-video')
+    const canvas = overlay.querySelector('#aim-photo-canvas')
+    const statusEl = overlay.querySelector('#aim-photo-status')
+    const captureBtn = overlay.querySelector('#aim-capture-btn')
+
+    overlay.querySelector('#aim-photo-file').addEventListener('change', e => {
+      const file = e.target.files?.[0]
+      if (file) {
+        window.pendingItemPhoto = file
+        closeModal()
+        navigate(buildFormUrl())
+      }
+    })
+
+    try {
+      aimStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      video.srcObject = aimStream
+      statusEl.textContent = 'Frame the object and tap the button'
+      captureBtn.disabled = false
+    } catch {
+      statusEl.textContent = 'Camera unavailable — use the library option below.'
+      return
+    }
+
+    captureBtn.addEventListener('click', () => {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      canvas.getContext('2d').drawImage(video, 0, 0)
+      stopAimCamera()
+      canvas.toBlob(blob => {
+        if (blob) window.pendingItemPhoto = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+        closeModal()
+        navigate(buildFormUrl())
+      }, 'image/jpeg', 0.92)
+    })
+  }
+
+  renderMethods()
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('aim-overlay--open'))
+}
+
 // ─── Confirm delete modal ─────────────────────────────────────────────────────
 
 function confirmDelete(title, body = '') {
@@ -3672,3 +3953,7 @@ function applyTheme(theme) {
 initThemePicker()
 initWelcomeCanvas()
 render(location.pathname)
+
+// Expose globals for inline onclick handlers in dynamically rendered HTML
+window.navigate = navigate
+window.openAddItemModal = openAddItemModal
