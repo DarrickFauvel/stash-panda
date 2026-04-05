@@ -2008,6 +2008,13 @@ quantity-stepper input[type="number"] {
   animation: none;
 }
 
+/* Prevent the group from animating height/position changes between pages,
+   which would cause an unwanted vertical shift during the slide. */
+::view-transition-group(page) {
+  animation: none;
+  overflow: clip;
+}
+
 @keyframes vt-slide-out-left {
   to { transform: translateX(-30%); opacity: 0; }
 }
