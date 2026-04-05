@@ -1914,7 +1914,7 @@ quantity-stepper input[type="number"] {
 
 /* ─── View Transitions ────────────────────────────────────────────────────── */
 
-#root { overflow-x: hidden; }
+#root { overflow-x: clip; } /* clip unlike hidden does not create a scroll container, preserving position:sticky */
 
 #app { view-transition-name: page; }
 
