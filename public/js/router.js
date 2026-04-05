@@ -122,6 +122,8 @@ export const prefs = {
   set(key, val) { this._data = { ...this._load(), [key]: val }; localStorage.setItem(this._key, JSON.stringify(this._data)) },
   get locIcons() { return this.get('locIcons', true) },
   set locIcons(v) { this.set('locIcons', v) },
+  get galaxyIcons() { return this.get('galaxyIcons', true) },
+  set galaxyIcons(v) { this.set('galaxyIcons', v) },
 }
 
 // ─── Location label system ───────────────────────────────────────────────────
@@ -547,7 +549,7 @@ async function routeGalaxies() {
              <div class="item-row galaxy-row" draggable="true" data-id="${inv.id}">
                <span class="drag-handle" aria-hidden="true">⠿</span>
                <a href="/galaxies/${inv.id}" data-link class="galaxy-row__link">
-                 <div class="item-row__photo item-row__photo--placeholder">${galaxyIcon(inv.name)}</div>
+                 <div class="item-row__photo item-row__photo--placeholder">${prefs.galaxyIcons ? galaxyIcon(inv.name) : escapeHTML(inv.name.charAt(0).toUpperCase())}</div>
                  <div class="item-row__info">
                    <div class="item-row__name">${escapeHTML(inv.name)}<span class="galaxy-row__type-label">galaxy</span></div>
                    <div class="item-row__meta">${inv.subtitle ? escapeHTML(inv.subtitle) + ' · ' : ''}${inv.item_count} item${inv.item_count !== 1 ? 's' : ''} · ${inv.role}</div>
@@ -2964,6 +2966,10 @@ function routeProfile() {
         <div class="card-body">
           <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Preferences</h2>
           <label class="toggle-row">
+            <span class="toggle-row__label">Show galaxy icons</span>
+            <input type="checkbox" id="pref-galaxy-icons" class="toggle-checkbox" ${prefs.galaxyIcons ? 'checked' : ''}>
+          </label>
+          <label class="toggle-row" style="margin-top:var(--space-3)">
             <span class="toggle-row__label">Show location icons</span>
             <input type="checkbox" id="pref-loc-icons" class="toggle-checkbox" ${prefs.locIcons ? 'checked' : ''}>
           </label>
@@ -2978,6 +2984,9 @@ function routeProfile() {
     </div>
   `)
 
+  document.getElementById('pref-galaxy-icons').addEventListener('change', e => {
+    prefs.galaxyIcons = e.target.checked
+  })
   document.getElementById('pref-loc-icons').addEventListener('change', e => {
     prefs.locIcons = e.target.checked
   })
