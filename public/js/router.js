@@ -1911,13 +1911,20 @@ async function routeItemNew(matches) {
     { label: 'Add Item' },
   ])
 
+  const locById = Object.fromEntries(locations.map(n => [n.id, n]))
+  const selectedAncestors = new Set()
+  let _cur = locById[preselectedLocationId]
+  while (_cur?.parent_id) { selectedAncestors.add(_cur.parent_id); _cur = locById[_cur.parent_id] }
+
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => {
+        const inChain = n.id === preselectedLocationId || selectedAncestors.has(n.id)
+        const prefix = inChain ? '▸\u00a0' : '\u00a0\u00a0'
         const label = n.location_type === 'room'
-          ? escapeHTML(n.name)
-          : '\u00a0\u00a0'.repeat(depth) + escapeHTML(n.name)
+          ? prefix + escapeHTML(n.name)
+          : prefix + '\u00a0\u00a0'.repeat(depth) + escapeHTML(n.name)
         return [
           `<option value="${n.id}"${n.id === preselectedLocationId ? ' selected' : ''}>${label}</option>`,
           ...buildLocOptions(nodes, n.id, depth + 1),
@@ -2904,13 +2911,20 @@ async function routeItemEdit(matches) {
   const dim = cf.box_dimensions ?? {}
   const wt = cf.weight ?? {}
 
+  const locById = Object.fromEntries(locations.map(n => [n.id, n]))
+  const selectedAncestors = new Set()
+  let _cur = locById[item.location_id]
+  while (_cur?.parent_id) { selectedAncestors.add(_cur.parent_id); _cur = locById[_cur.parent_id] }
+
   function buildLocOptions(nodes, parentId = null, depth = 0) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => {
+        const inChain = n.id === item.location_id || selectedAncestors.has(n.id)
+        const prefix = inChain ? '▸\u00a0' : '\u00a0\u00a0'
         const label = n.location_type === 'room'
-          ? escapeHTML(n.name)
-          : '\u00a0\u00a0'.repeat(depth) + escapeHTML(n.name)
+          ? prefix + escapeHTML(n.name)
+          : prefix + '\u00a0\u00a0'.repeat(depth) + escapeHTML(n.name)
         return [
           `<option value="${n.id}" ${item.location_id === n.id ? 'selected' : ''}>${label}</option>`,
           ...buildLocOptions(nodes, n.id, depth + 1),
