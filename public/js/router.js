@@ -28,13 +28,21 @@ export const auth = {
 // ─── API helper ─────────────────────────────────────────────────────────────
 
 export async function api(method, path, body) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers = {}
   if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
+
+  let fetchBody
+  if (body instanceof FormData) {
+    fetchBody = body
+  } else if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    fetchBody = JSON.stringify(body)
+  }
 
   const res = await fetch(`/api${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: fetchBody,
   })
 
   if (res.status === 401) {
@@ -81,18 +89,65 @@ function setBreadcrumb(crumbs) {
   }
 }
 
+function userInitials(name) {
+  return (name ?? '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
 function setNav(isLoggedIn) {
   document.getElementById('bottom-nav').hidden = !isLoggedIn
 
   const actions = document.getElementById('header-actions')
   if (isLoggedIn) {
+    const user = auth.user
+    const initials = userInitials(user?.name)
+    const avatarInner = user?.avatar_url
+      ? `<img src="${user.avatar_url}" alt="${escapeHTML(user?.name ?? '')}" class="user-avatar__img">`
+      : `<span class="user-avatar__initials">${initials}</span>`
+
     actions.innerHTML = `
-      <span class="text-sm text-muted">${auth.user?.name ?? ''}</span>
-      <button class="btn btn-ghost btn-sm" id="btn-logout">Sign out</button>
+      <div class="user-avatar-wrap" id="user-avatar-wrap">
+        <button class="user-avatar" id="btn-avatar" aria-haspopup="true" aria-expanded="false" title="${escapeHTML(user?.name ?? '')}">
+          ${avatarInner}
+        </button>
+        <div class="avatar-menu" id="avatar-menu" hidden>
+          <div class="avatar-menu__header">
+            <div class="avatar-menu__name">${escapeHTML(user?.name ?? '')}</div>
+            <div class="avatar-menu__email">${escapeHTML(user?.email ?? '')}</div>
+          </div>
+          <a href="/profile" data-link class="avatar-menu__item" id="avatar-menu-profile">Profile &amp; Settings</a>
+          <button class="avatar-menu__item avatar-menu__item--danger" id="btn-logout">Sign out</button>
+        </div>
+      </div>
     `
+
+    const btn = document.getElementById('btn-avatar')
+    const menu = document.getElementById('avatar-menu')
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      const open = !menu.hidden
+      menu.hidden = open
+      btn.setAttribute('aria-expanded', String(!open))
+    })
+
     document.getElementById('btn-logout').addEventListener('click', () => {
       auth.clear()
       navigate('/login')
+    })
+
+    document.getElementById('avatar-menu-profile').addEventListener('click', () => {
+      menu.hidden = true
+    })
+
+    document.addEventListener('click', function closeMenu(e) {
+      const wrap = document.getElementById('user-avatar-wrap')
+      if (!wrap || !wrap.contains(e.target)) {
+        if (menu && !menu.hidden) {
+          menu.hidden = true
+          btn.setAttribute('aria-expanded', 'false')
+        }
+        if (!wrap) document.removeEventListener('click', closeMenu)
+      }
     })
   } else {
     actions.innerHTML = `<a href="/login" data-link class="btn btn-primary btn-sm">Sign in</a>`
@@ -3074,6 +3129,27 @@ function routeProfile() {
 
       <div class="card mb-4">
         <div class="card-body">
+          <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Avatar</h2>
+          <div id="avatar-error" role="alert"></div>
+          <div class="avatar-editor">
+            <div class="avatar-editor__preview">
+              ${user?.avatar_url
+                ? `<img src="${escapeHTML(user.avatar_url)}" alt="" class="user-avatar user-avatar--lg">`
+                : `<div class="user-avatar user-avatar--lg"><span class="user-avatar__initials">${userInitials(user?.name)}</span></div>`}
+            </div>
+            <div class="avatar-editor__actions">
+              <label class="btn btn-secondary btn-sm" style="cursor:pointer">
+                Upload photo
+                <input type="file" id="avatar-file-input" accept="image/*" style="display:none">
+              </label>
+              ${user?.avatar_url ? `<button class="btn btn-ghost btn-sm" id="btn-remove-avatar">Remove</button>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-body">
           <h2 class="text-sm font-semi text-muted mb-4" style="text-transform:uppercase;letter-spacing:.05em">Account details</h2>
           <div id="profile-success" role="status"></div>
           <div id="profile-error" role="alert"></div>
@@ -3139,6 +3215,40 @@ function routeProfile() {
       </div>
     </div>
   `)
+
+  document.getElementById('avatar-file-input').addEventListener('change', async e => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const errorEl = document.getElementById('avatar-error')
+    errorEl.innerHTML = ''
+    const formData = new FormData()
+    formData.append('avatar', file)
+    try {
+      const data = await api('POST', '/auth/avatar', formData)
+      if (data) {
+        auth.save(data.token, data.user)
+        setNav(true)
+        routeProfile()
+      }
+    } catch (err) {
+      errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+    }
+  })
+
+  document.getElementById('btn-remove-avatar')?.addEventListener('click', async () => {
+    const errorEl = document.getElementById('avatar-error')
+    errorEl.innerHTML = ''
+    try {
+      const data = await api('DELETE', '/auth/avatar')
+      if (data) {
+        auth.save(data.token, data.user)
+        setNav(true)
+        routeProfile()
+      }
+    } catch (err) {
+      errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+    }
+  })
 
   document.getElementById('pref-galaxy-icons').addEventListener('change', e => {
     prefs.galaxyIcons = e.target.checked

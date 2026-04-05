@@ -2,9 +2,23 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'crypto'
+import { unlink } from 'fs/promises'
+import { join, extname } from 'path'
+import multer from 'multer'
 import { db } from '../db/client.ts'
 import { requireAuth } from '../middleware/auth.ts'
 import { sendVerificationEmail, sendPasswordResetEmail } from '../email.ts'
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads'
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_req, file, cb) => cb(null, `avatar-${randomUUID()}${extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+})
 
 const router = Router()
 
@@ -60,7 +74,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const result = await db.execute({
-      sql: 'SELECT id, name, email, password_hash FROM users WHERE email = ?',
+      sql: 'SELECT id, name, email, password_hash, avatar_url FROM users WHERE email = ?',
       args: [email.toLowerCase()],
     })
     const user = result.rows[0]
@@ -77,7 +91,7 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email } })
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url ?? null } })
   } catch (err) {
     console.error('login:', err)
     res.status(500).json({ error: 'Server error' })
@@ -173,7 +187,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
 
   try {
     const result = await db.execute({
-      sql: 'SELECT id, name, email, password_hash FROM users WHERE id = ?',
+      sql: 'SELECT id, name, email, password_hash, avatar_url FROM users WHERE id = ?',
       args: [req.user!.id],
     })
     const user = result.rows[0]
@@ -199,9 +213,78 @@ router.patch('/profile', requireAuth, async (req, res) => {
       process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
-    res.json({ token, user: { id: req.user!.id, name: newName, email: req.user!.email } })
+    res.json({ token, user: { id: req.user!.id, name: newName, email: req.user!.email, avatar_url: user.avatar_url ?? null } })
   } catch (err) {
     console.error('profile patch:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// POST /api/auth/avatar
+router.post('/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image file provided' })
+
+  try {
+    // Delete old avatar file if it was a local upload
+    const existing = await db.execute({
+      sql: 'SELECT avatar_url FROM users WHERE id = ?',
+      args: [req.user!.id],
+    })
+    const oldUrl = existing.rows[0]?.avatar_url as string | null
+    if (oldUrl?.startsWith('/uploads/')) {
+      const oldPath = join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))
+      unlink(oldPath).catch(() => {})
+    }
+
+    const url = `/uploads/${req.file.filename}`
+    await db.execute({
+      sql: 'UPDATE users SET avatar_url = ?, updated_at = unixepoch() WHERE id = ?',
+      args: [url, req.user!.id],
+    })
+
+    const userResult = await db.execute({
+      sql: 'SELECT id, name, email, avatar_url FROM users WHERE id = ?',
+      args: [req.user!.id],
+    })
+    const user = userResult.rows[0]
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.name },
+      process.env.JWT_SECRET!,
+      { expiresIn: '30d' }
+    )
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, avatar_url: url } })
+  } catch (err) {
+    console.error('avatar upload:', err)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// DELETE /api/auth/avatar
+router.delete('/avatar', requireAuth, async (req, res) => {
+  try {
+    const existing = await db.execute({
+      sql: 'SELECT avatar_url FROM users WHERE id = ?',
+      args: [req.user!.id],
+    })
+    const oldUrl = existing.rows[0]?.avatar_url as string | null
+    if (oldUrl?.startsWith('/uploads/')) {
+      const oldPath = join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))
+      unlink(oldPath).catch(() => {})
+    }
+
+    await db.execute({
+      sql: 'UPDATE users SET avatar_url = NULL, updated_at = unixepoch() WHERE id = ?',
+      args: [req.user!.id],
+    })
+
+    const token = jwt.sign(
+      { id: req.user!.id, email: req.user!.email, name: req.user!.name },
+      process.env.JWT_SECRET!,
+      { expiresIn: '30d' }
+    )
+    res.json({ token, user: { id: req.user!.id, name: req.user!.name, email: req.user!.email, avatar_url: null } })
+  } catch (err) {
+    console.error('avatar delete:', err)
     res.status(500).json({ error: 'Server error' })
   }
 })
