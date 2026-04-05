@@ -666,6 +666,8 @@ quantity-stepper input[type="number"] {
 }
 
 /* ─── Disposition ───────────────────────────────────────────────────────── */
+.new-item-photo-row { display: flex; align-items: center; gap: var(--space-3); }
+
 .disposition-badge {
   display: inline-block;
   font-size: 0.65rem;

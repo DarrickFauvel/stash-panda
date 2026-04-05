@@ -1998,6 +1998,30 @@ async function routeItemNew(matches) {
             <div id="new-custom-cards" style="margin-top:var(--space-4)"></div>
             <button type="button" id="btn-add-card" class="btn btn-ghost btn-sm" style="margin-bottom:var(--space-4)">+ Add custom card</button>
 
+            <div class="field">
+              <label>Photo</label>
+              <div class="new-item-photo-row">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-open-camera">📷 Camera</button>
+                <label class="btn btn-secondary btn-sm" style="cursor:pointer">
+                  🖼 Choose file
+                  <input type="file" id="new-item-photo-input" accept="image/*" style="display:none">
+                </label>
+                <span id="new-item-photo-name" class="text-xs text-muted"></span>
+              </div>
+              <div id="new-item-camera-preview" hidden style="margin-top:var(--space-2)">
+                <video id="new-item-camera-video" autoplay playsinline muted style="width:100%;border-radius:var(--radius);max-height:260px;background:#000;object-fit:cover;display:block"></video>
+                <div style="display:flex;gap:var(--space-2);margin-top:var(--space-2)">
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-capture-photo">⬤ Capture</button>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-camera">Cancel</button>
+                </div>
+              </div>
+              <div id="new-item-photo-preview" style="margin-top:var(--space-2);display:none">
+                <img id="new-item-photo-img" style="max-height:160px;border-radius:var(--radius);object-fit:cover;display:block">
+                <button type="button" class="btn btn-ghost btn-xs" id="btn-clear-photo" style="margin-top:var(--space-1)">Remove</button>
+              </div>
+              <canvas id="new-item-photo-canvas" style="display:none"></canvas>
+            </div>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add item</button>
               <a href="/galaxies/${galaxyId}/items" data-link class="btn btn-secondary">Cancel</a>
@@ -2064,6 +2088,60 @@ async function routeItemNew(matches) {
       `
       document.getElementById('dup-dismiss').addEventListener('click', () => { nameHint.innerHTML = '' })
     }, 350)
+  })
+
+  // ── Photo selection ───────────────────────────────────────────────────────
+  let pendingPhotoFile = null
+  let photoStream = null
+
+  function setPhotoPreview(file, label) {
+    pendingPhotoFile = file
+    document.getElementById('new-item-photo-name').textContent = label ?? file.name
+    const img = document.getElementById('new-item-photo-img')
+    img.src = URL.createObjectURL(file)
+    document.getElementById('new-item-photo-preview').style.display = 'block'
+  }
+
+  function stopPhotoCamera() {
+    if (photoStream) { photoStream.getTracks().forEach(t => t.stop()); photoStream = null }
+    document.getElementById('new-item-camera-preview').hidden = true
+    document.getElementById('new-item-camera-video').srcObject = null
+  }
+
+  document.getElementById('new-item-photo-input').addEventListener('change', e => {
+    const file = e.target.files?.[0]
+    if (file) setPhotoPreview(file)
+  })
+
+  document.getElementById('btn-open-camera').addEventListener('click', async () => {
+    try {
+      photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const video = document.getElementById('new-item-camera-video')
+      video.srcObject = photoStream
+      document.getElementById('new-item-camera-preview').hidden = false
+    } catch {
+      alert('Camera access denied or unavailable.')
+    }
+  })
+
+  document.getElementById('btn-capture-photo').addEventListener('click', () => {
+    const video = document.getElementById('new-item-camera-video')
+    const canvas = document.getElementById('new-item-photo-canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    stopPhotoCamera()
+    canvas.toBlob(blob => {
+      if (blob) setPhotoPreview(new File([blob], 'photo.jpg', { type: 'image/jpeg' }), 'Camera photo')
+    }, 'image/jpeg', 0.9)
+  })
+
+  document.getElementById('btn-cancel-camera').addEventListener('click', stopPhotoCamera)
+
+  document.getElementById('btn-clear-photo').addEventListener('click', () => {
+    pendingPhotoFile = null
+    document.getElementById('new-item-photo-preview').style.display = 'none'
+    document.getElementById('new-item-photo-name').textContent = ''
   })
 
   // ── Barcode scanning & lookup ─────────────────────────────────────────────
@@ -2212,7 +2290,16 @@ async function routeItemNew(matches) {
         custom_fields: Object.keys(customFields).length ? customFields : undefined,
       })
       if (data) {
-        if (productImageUrl) {
+        stopPhotoCamera()
+        if (pendingPhotoFile) {
+          try {
+            const form = new FormData()
+            form.append('photo', pendingPhotoFile)
+            const headers = {}
+            if (auth.token) headers['Authorization'] = `Bearer ${auth.token}`
+            await fetch(`/api/galaxies/${galaxyId}/items/${data.item.id}/photos`, { method: 'POST', headers, body: form })
+          } catch {}
+        } else if (productImageUrl) {
           try { await api('POST', `/galaxies/${galaxyId}/items/${data.item.id}/photos/url`, { url: productImageUrl }) } catch {}
         }
         navigate(`/galaxies/${galaxyId}/items/${data.item.id}`)
