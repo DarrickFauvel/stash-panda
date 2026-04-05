@@ -1222,14 +1222,13 @@ async function routeGalaxy(matches) {
                   <span class="loc-label-badge loc-node__name editable-name" data-id="${node.id}" title="Click to rename">
                     ${isRoom ? escapeHTML(node.name) : segLabel}
                   </span>
-                  <span class="location-row__type">${typeLabel}</span>
+                  <label class="loc-type-label-btn" title="Change type">
+                    <span class="location-row__type">${typeLabel}</span>
+                    <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
+                  </label>
                 </span>
                 ${showName ? `<span class="loc-node__subname editable-name" data-id="${node.id}" title="Click to rename">${escapeHTML(node.name)}</span>` : ''}
               </span>
-              <label class="loc-type-btn" title="Change type">
-                <span class="loc-type-btn__icon" aria-hidden="true">${prefs.locIcons ? t.icon : (LOC_TYPE_CODE[node.location_type] ?? 'OT')}</span>
-                <select class="loc-type-select" data-id="${node.id}" aria-label="Location type">${typeSelectHTML}</select>
-              </label>
               <button class="btn btn-ghost btn-xs loc-add-child-btn" data-parent="${node.id}" title="Add child location" aria-label="Add child location">+</button>
               <button class="btn btn-ghost btn-xs loc-delete" data-id="${node.id}" title="Delete" aria-label="Delete location">×</button>
             </div>
