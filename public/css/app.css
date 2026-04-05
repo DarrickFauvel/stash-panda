@@ -437,6 +437,55 @@ textarea { resize: vertical; min-height: 5rem; }
   margin-inline: auto;
 }
 
+.empty-state__nebula {
+  position: relative;
+  width: 9rem;
+  height: 9rem;
+  margin: 0 auto var(--space-5);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 60% 40% at 38% 42%, rgba(167,139,250,0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 62% 55%, rgba(96,165,250,0.45) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 50% at 50% 50%, rgba(236,72,153,0.25) 0%, transparent 70%),
+    radial-gradient(ellipse 90% 90% at 50% 50%, rgba(15,10,40,0.92) 0%, transparent 100%);
+  box-shadow:
+    0 0 40px 10px rgba(139,92,246,0.18),
+    0 0 80px 20px rgba(59,130,246,0.10);
+  animation: nebula-pulse 6s ease-in-out infinite;
+}
+.empty-state__nebula::before {
+  content: '';
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 45% 45%, rgba(255,255,255,0.07) 0%, transparent 60%);
+  animation: nebula-pulse 6s ease-in-out infinite reverse;
+}
+.empty-state__nebula::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgba(139,92,246,0.12) 20%,
+    transparent 40%,
+    rgba(59,130,246,0.10) 60%,
+    transparent 80%,
+    rgba(236,72,153,0.10) 100%
+  );
+  animation: nebula-spin 18s linear infinite;
+}
+@keyframes nebula-pulse {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50%       { opacity: 1;    transform: scale(1.06); }
+}
+@keyframes nebula-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* ─── Alerts ─────────────────────────────────────────────────────────────── */
 .alert {
   padding: var(--space-3) var(--space-4);
@@ -604,6 +653,8 @@ quantity-stepper input[type="number"] {
 .location-row__name { font-size: 0.75rem; font-weight: 500; font-family: var(--font-mono, monospace); letter-spacing: 0.03em; color: #64748b; }
 .location-row__type { font-size: 0.65rem; color: var(--c-text-subtle); white-space: nowrap; letter-spacing: 0.05em; }
 .location-row__count { font-size: var(--text-xs); color: var(--c-muted); white-space: nowrap; margin-left: var(--space-3); align-self: center; }
+.location-row__add-item { opacity: 0; margin-left: var(--space-2); align-self: center; transition: opacity 0.15s; }
+.location-row:hover .location-row__add-item { opacity: 1; }
 
 .loc-label-badge {
   font-size: var(--text-sm);

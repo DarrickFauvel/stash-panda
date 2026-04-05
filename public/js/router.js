@@ -1514,6 +1514,8 @@ async function routeLocations(matches) {
               ${showName ? `<span class="location-row__name">${escapeHTML(node.name)}</span>` : ''}
             </span>
             <span class="location-row__count">${total} item${total !== 1 ? 's' : ''}</span>
+            <button type="button" class="btn btn-ghost btn-sm location-row__add-item" title="Add item here"
+              onclick="event.preventDefault();event.stopPropagation();navigate('/galaxies/${galaxyId}/items/new?location=${node.id}')">+</button>
           </a>
           ${renderTree(node.children, depth + 1)}
         `
@@ -1622,9 +1624,9 @@ async function routeLocation(matches) {
 
     const emptyHTML = !children.length && !items.length ? `
       <div class="empty-state">
-        <div class="empty-state__icon">📭</div>
-        <div class="empty-state__title">Nothing here yet</div>
-        <div class="empty-state__body">Add items and assign them to this location.</div>
+        <div class="empty-state__nebula" aria-hidden="true"></div>
+        <div class="empty-state__title">This system is still forming.</div>
+        <div class="empty-state__body">Matter has yet to coalesce here. Add items to bring this location to life.</div>
       </div>` : ''
 
     // Build ancestor chain + breadcrumb
@@ -1651,7 +1653,10 @@ async function routeLocation(matches) {
     setHTML(`
       <div>
         <div class="page-header">
-          <h1 class="page-title">${prefs.locIcons ? `${locTypeIcon[current.location_type] ?? '📍'} ` : ''}${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
+          <div class="page-header-row">
+            <h1 class="page-title">${prefs.locIcons ? `${locTypeIcon[current.location_type] ?? '📍'} ` : ''}${escapeHTML(current.name)} <span class="loc-label-badge loc-label-badge--lg">${currentLabel}</span></h1>
+            <a href="/galaxies/${galaxyId}/items/new?location=${locationId}" data-link class="btn btn-primary btn-sm">+ Add Item</a>
+          </div>
         </div>
         ${sublocsHTML}
         ${itemsHTML}
@@ -1831,6 +1836,7 @@ async function routeItems(matches) {
 async function routeItemNew(matches) {
   if (!auth.isLoggedIn) return navigate('/login')
   const galaxyId = matches[1]
+  const preselectedLocationId = new URLSearchParams(window.location.search).get('location') ?? ''
   setHTML('<div class="page-loader"><div class="page-loader__spinner"></div></div>')
 
   const [invData, locData, catData] = await Promise.all([
@@ -1853,7 +1859,7 @@ async function routeItemNew(matches) {
     return nodes
       .filter(n => (n.parent_id ?? null) === parentId)
       .flatMap(n => [
-        `<option value="${n.id}">${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
+        `<option value="${n.id}"${n.id === preselectedLocationId ? ' selected' : ''}>${'\u00a0\u00a0'.repeat(depth)}${prefs.locIcons ? `${LOC_TYPE_ICON_NEW[n.location_type] ?? '📍'} ` : ''}${escapeHTML(n.name)} [${computeLocLabel(n.id, nodes)}]</option>`,
         ...buildLocOptions(nodes, n.id, depth + 1),
       ])
   }
