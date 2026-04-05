@@ -126,6 +126,23 @@ export const prefs = {
   set galaxyIcons(v) { this.set('galaxyIcons', v) },
 }
 
+// ─── Disposition ─────────────────────────────────────────────────────────────
+
+const DISPOSITIONS = [
+  { value: 'sell',    label: 'To Sell',   color: '#16a34a' },
+  { value: 'donate',  label: 'To Donate', color: '#2563eb' },
+  { value: 'discard', label: 'To Discard',color: '#dc2626' },
+  { value: 'return',  label: 'To Return', color: '#d97706' },
+  { value: 'lend',    label: 'To Lend',   color: '#7c3aed' },
+]
+const DISPOSITION_MAP = Object.fromEntries(DISPOSITIONS.map(d => [d.value, d]))
+
+function dispositionBadge(value) {
+  const d = DISPOSITION_MAP[value]
+  if (!d) return ''
+  return `<span class="disposition-badge" style="--d-color:${d.color}">${d.label}</span>`
+}
+
 // ─── Location label system ───────────────────────────────────────────────────
 // Each location type maps to a 2-letter code used in compound labels like SH01-LV02
 
@@ -1594,7 +1611,7 @@ async function routeLocation(matches) {
                 ? `<div class="item-row__photo"><img src="${item.photo_url}" alt="" loading="lazy"></div>`
                 : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`}
               <div class="item-row__info">
-                <div class="item-row__name">${escapeHTML(item.name)}</div>
+                <div class="item-row__name">${escapeHTML(item.name)}${item.disposition ? ' ' + dispositionBadge(item.disposition) : ''}</div>
                 <div class="item-row__meta">${escapeHTML(item.category_name ?? item.item_type)}</div>
               </div>
               <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
@@ -1704,7 +1721,7 @@ async function routeItems(matches) {
               : `<div class="item-row__photo item-row__photo--placeholder">${typeIcon[item.item_type] ?? '📦'}</div>`
             }
             <div class="item-row__info">
-              <div class="item-row__name">${escapeHTML(item.name)}</div>
+              <div class="item-row__name">${escapeHTML(item.name)}${item.disposition ? ' ' + dispositionBadge(item.disposition) : ''}</div>
               <div class="item-row__meta">${item.location_id ? `${escapeHTML(locationPath(item.location_id))} <span class="loc-label-badge" style="font-size:0.6rem">${computeLocLabel(item.location_id, allLocations)}</span>` : escapeHTML(item.category_name ?? item.item_type)}</div>
             </div>
             <div class="item-row__qty">${item.quantity}${item.unit ? ' ' + escapeHTML(item.unit) : ''}</div>
@@ -2323,6 +2340,19 @@ async function routeItem(matches) {
 
         <div class="card mb-4">
           <div class="card-body">
+            <div class="text-xs text-muted font-medium mb-1" style="text-transform:uppercase;letter-spacing:.05em">Disposition</div>
+            <div class="disposition-btns" id="disposition-btns">
+              ${DISPOSITIONS.map(d => `
+                <button class="disposition-btn${item.disposition === d.value ? ' disposition-btn--active' : ''}"
+                  data-value="${d.value}" style="--d-color:${d.color}">${d.label}</button>
+              `).join('')}
+              ${item.disposition ? `<button class="disposition-btn disposition-btn--clear" id="disposition-clear">Clear</button>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-body">
             <div class="text-xs text-muted font-medium mb-1" style="text-transform:uppercase;letter-spacing:.05em">Quantity</div>
             <div class="inline-editable" id="item-qty-row" title="Click to edit" style="font-size:var(--text-3xl);font-weight:var(--weight-bold);color:var(--c-brand);line-height:1.2;display:inline-block">
               <span id="item-qty-val">${item.quantity}</span>${item.unit ? ' <span style="font-size:var(--text-lg)">' + escapeHTML(item.unit) + '</span>' : ''}
@@ -2341,6 +2371,30 @@ async function routeItem(matches) {
 
       </div>
     `)
+
+    document.getElementById('disposition-btns').addEventListener('click', async e => {
+      const btn = e.target.closest('.disposition-btn')
+      if (!btn) return
+      const value = btn.id === 'disposition-clear' ? null : btn.dataset.value
+      try {
+        await api('PATCH', `/galaxies/${galaxyId}/items/${itemId}`, { disposition: value })
+        // Update buttons in place — no page reload
+        const container = document.getElementById('disposition-btns')
+        container.querySelectorAll('.disposition-btn').forEach(b => b.classList.remove('disposition-btn--active'))
+        if (value) btn.classList.add('disposition-btn--active')
+        // Show/hide clear button
+        let clearBtn = document.getElementById('disposition-clear')
+        if (value && !clearBtn) {
+          clearBtn = document.createElement('button')
+          clearBtn.className = 'disposition-btn disposition-btn--clear'
+          clearBtn.id = 'disposition-clear'
+          clearBtn.textContent = 'Clear'
+          container.appendChild(clearBtn)
+        } else if (!value && clearBtn) {
+          clearBtn.remove()
+        }
+      } catch (err) { alert(err.message) }
+    })
 
     document.getElementById('btn-delete').addEventListener('click', async () => {
       if (!await confirmDelete(`Delete "${item.name}"?`, 'This item and all its photos will be permanently removed.')) return
@@ -2819,6 +2873,14 @@ async function routeItemEdit(matches) {
             <div id="edit-custom-cards" style="margin-top:var(--space-4)"></div>
             <button type="button" id="btn-add-card" class="btn btn-ghost btn-sm" style="margin-bottom:var(--space-4)">+ Add custom card</button>
 
+            <div class="field">
+              <label for="item-disposition">Disposition</label>
+              <select id="item-disposition" name="disposition">
+                <option value="">— None —</option>
+                ${DISPOSITIONS.map(d => `<option value="${d.value}" ${item.disposition === d.value ? 'selected' : ''}>${d.label}</option>`).join('')}
+              </select>
+            </div>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save changes</button>
               <a href="/galaxies/${galaxyId}/items/${itemId}" data-link class="btn btn-secondary">Cancel</a>
@@ -2897,6 +2959,7 @@ async function routeItemEdit(matches) {
         item_type:   e.target.item_type.value,
         description: e.target.description.value || null,
         custom_fields: customFields,
+        disposition: e.target.disposition.value || null,
       })
       navigate(`/galaxies/${galaxyId}/items/${itemId}`)
     } catch (err) {

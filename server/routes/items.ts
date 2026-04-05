@@ -65,7 +65,7 @@ router.get('/', requireAuth, async (req, res) => {
     const result = await db.execute({
       sql: `SELECT i.id, i.name, i.quantity, i.unit, i.item_type,
                    i.value, i.expiry_date, i.tags, i.updated_at,
-                   i.location_id,
+                   i.location_id, i.disposition,
                    c.name AS category_name, l.name AS location_name,
                    (SELECT url FROM item_photos WHERE item_id = i.id ORDER BY created_at ASC LIMIT 1) AS photo_url
             FROM items i
@@ -158,7 +158,7 @@ router.patch('/:itemId', requireAuth, async (req, res) => {
   const allowed = [
     'name', 'quantity', 'unit', 'location_id', 'category_id', 'tags',
     'value', 'purchase_date', 'expiry_date', 'barcode', 'description',
-    'item_type', 'custom_fields',
+    'item_type', 'custom_fields', 'disposition',
   ]
   const jsonFields = new Set(['tags', 'custom_fields'])
   const setClauses: string[] = []
