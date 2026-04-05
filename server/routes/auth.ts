@@ -16,7 +16,7 @@ const avatarUpload = multer({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => cb(null, `avatar-${randomUUID()}${extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
 })
 
@@ -221,29 +221,39 @@ router.patch('/profile', requireAuth, async (req, res) => {
 })
 
 // POST /api/auth/avatar
-router.post('/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image file provided' })
+router.post('/avatar', requireAuth, avatarUpload.any(), async (req, res) => {
+  const allFiles = (req.files ?? []) as Express.Multer.File[]
+  const croppedFile = allFiles.find(f => f.fieldname === 'avatar')
+  const originalFile = allFiles.find(f => f.fieldname === 'avatar_original')
+  if (!croppedFile) return res.status(400).json({ error: 'No image file provided' })
 
   try {
-    // Delete old avatar file if it was a local upload
     const existing = await db.execute({
-      sql: 'SELECT avatar_url FROM users WHERE id = ?',
+      sql: 'SELECT avatar_url, avatar_original_url FROM users WHERE id = ?',
       args: [req.user!.id],
     })
     const oldUrl = existing.rows[0]?.avatar_url as string | null
+    const oldOriginalUrl = existing.rows[0]?.avatar_original_url as string | null
+
+    // Delete old cropped avatar
     if (oldUrl?.startsWith('/uploads/')) {
-      const oldPath = join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))
-      unlink(oldPath).catch(() => {})
+      unlink(join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))).catch(() => {})
+    }
+    // Delete old original only when a new original is being stored
+    if (originalFile && oldOriginalUrl?.startsWith('/uploads/')) {
+      unlink(join(UPLOAD_DIR, oldOriginalUrl.replace('/uploads/', ''))).catch(() => {})
     }
 
-    const url = `/uploads/${req.file.filename}`
+    const url = `/uploads/${croppedFile.filename}`
+    const originalUrl = originalFile ? `/uploads/${originalFile.filename}` : oldOriginalUrl
+
     await db.execute({
-      sql: 'UPDATE users SET avatar_url = ?, updated_at = unixepoch() WHERE id = ?',
-      args: [url, req.user!.id],
+      sql: 'UPDATE users SET avatar_url = ?, avatar_original_url = ?, updated_at = unixepoch() WHERE id = ?',
+      args: [url, originalUrl, req.user!.id],
     })
 
     const userResult = await db.execute({
-      sql: 'SELECT id, name, email, avatar_url FROM users WHERE id = ?',
+      sql: 'SELECT id, name, email, avatar_url, avatar_original_url FROM users WHERE id = ?',
       args: [req.user!.id],
     })
     const user = userResult.rows[0]
@@ -252,7 +262,7 @@ router.post('/avatar', requireAuth, avatarUpload.single('avatar'), async (req, r
       process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, avatar_url: url } })
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, avatar_url: url, avatar_original_url: originalUrl } })
   } catch (err) {
     console.error('avatar upload:', err)
     res.status(500).json({ error: 'Server error' })
@@ -263,17 +273,20 @@ router.post('/avatar', requireAuth, avatarUpload.single('avatar'), async (req, r
 router.delete('/avatar', requireAuth, async (req, res) => {
   try {
     const existing = await db.execute({
-      sql: 'SELECT avatar_url FROM users WHERE id = ?',
+      sql: 'SELECT avatar_url, avatar_original_url FROM users WHERE id = ?',
       args: [req.user!.id],
     })
     const oldUrl = existing.rows[0]?.avatar_url as string | null
+    const oldOriginalUrl = existing.rows[0]?.avatar_original_url as string | null
     if (oldUrl?.startsWith('/uploads/')) {
-      const oldPath = join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))
-      unlink(oldPath).catch(() => {})
+      unlink(join(UPLOAD_DIR, oldUrl.replace('/uploads/', ''))).catch(() => {})
+    }
+    if (oldOriginalUrl?.startsWith('/uploads/')) {
+      unlink(join(UPLOAD_DIR, oldOriginalUrl.replace('/uploads/', ''))).catch(() => {})
     }
 
     await db.execute({
-      sql: 'UPDATE users SET avatar_url = NULL, updated_at = unixepoch() WHERE id = ?',
+      sql: 'UPDATE users SET avatar_url = NULL, avatar_original_url = NULL, updated_at = unixepoch() WHERE id = ?',
       args: [req.user!.id],
     })
 
@@ -282,7 +295,7 @@ router.delete('/avatar', requireAuth, async (req, res) => {
       process.env.JWT_SECRET!,
       { expiresIn: '30d' }
     )
-    res.json({ token, user: { id: req.user!.id, name: req.user!.name, email: req.user!.email, avatar_url: null } })
+    res.json({ token, user: { id: req.user!.id, name: req.user!.name, email: req.user!.email, avatar_url: null, avatar_original_url: null } })
   } catch (err) {
     console.error('avatar delete:', err)
     res.status(500).json({ error: 'Server error' })

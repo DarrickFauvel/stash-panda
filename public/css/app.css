@@ -287,6 +287,76 @@ input, select, textarea { font: inherit; }
   gap: var(--space-2);
 }
 
+.avatar-editor__preview-btn {
+  position: relative;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
+.avatar-editor__preview-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: background 0.15s;
+  pointer-events: none;
+}
+
+.avatar-editor__preview-overlay svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.avatar-editor__preview-btn:hover .avatar-editor__preview-overlay {
+  background: rgba(0,0,0,0.45);
+}
+
+.avatar-editor__preview-btn:hover .avatar-editor__preview-overlay svg {
+  opacity: 1;
+}
+
+/* ─── Avatar crop modal ───────────────────────────────────────────────────── */
+
+.crop-canvas-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.crop-canvas-wrap canvas {
+  display: block;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  max-width: 100%;
+}
+
+.crop-canvas-wrap canvas:active {
+  cursor: grabbing;
+}
+
+.crop-hint {
+  font-size: var(--text-xs);
+  color: var(--c-text-muted);
+  text-align: center;
+  margin: 0;
+}
+
+.crop-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.crop-zoom-slider {
+  flex: 1;
+  accent-color: var(--c-primary);
+  cursor: pointer;
+}
+
 /* Main content */
 #app {
   flex: 1;

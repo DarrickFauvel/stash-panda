@@ -135,6 +135,9 @@ try {
 try {
   await db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
 } catch { /* column already exists */ }
+try {
+  await db.execute("ALTER TABLE users ADD COLUMN avatar_original_url TEXT")
+} catch { /* column already exists */ }
 
 // Add 'boardgame' to items.item_type CHECK constraint (requires table rebuild in SQLite)
 {

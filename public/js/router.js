@@ -93,6 +93,166 @@ function userInitials(name) {
   return (name ?? '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
+function openAvatarCropper(source, onConfirm) {
+  const CANVAS_SIZE = 300
+  const img = new Image()
+  const isBlobUrl = typeof source !== 'string'
+  const url = isBlobUrl ? URL.createObjectURL(source) : source
+
+  img.onload = () => {
+    const overlay = document.createElement('div')
+    overlay.className = 'modal-overlay'
+    overlay.innerHTML = `
+      <div class="modal-dialog" style="max-width:360px">
+        <div class="modal-dialog__header">
+          <span style="font-weight:600">Crop photo</span>
+          <button class="modal-dialog__close" id="crop-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-dialog__body">
+          <div class="crop-canvas-wrap">
+            <canvas id="crop-canvas" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
+          </div>
+          <div class="crop-zoom-controls">
+            <button class="btn btn-ghost btn-sm btn-icon" id="crop-zoom-out" aria-label="Zoom out">−</button>
+            <input type="range" id="crop-zoom-slider" min="0" max="100" value="0" class="crop-zoom-slider">
+            <button class="btn btn-ghost btn-sm btn-icon" id="crop-zoom-in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="modal-dialog__footer">
+          <button class="btn btn-ghost btn-sm" id="crop-cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="crop-apply">Apply</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(overlay)
+
+    const canvas = document.getElementById('crop-canvas')
+    const ctx = canvas.getContext('2d')
+
+    const minScale = Math.max(CANVAS_SIZE / img.width, CANVAS_SIZE / img.height)
+    let scale = minScale
+    let ox = (CANVAS_SIZE - img.width * scale) / 2
+    let oy = (CANVAS_SIZE - img.height * scale) / 2
+
+    function clamp() {
+      const w = img.width * scale
+      const h = img.height * scale
+      ox = w >= CANVAS_SIZE ? Math.min(0, Math.max(ox, CANVAS_SIZE - w)) : (CANVAS_SIZE - w) / 2
+      oy = h >= CANVAS_SIZE ? Math.min(0, Math.max(oy, CANVAS_SIZE - h)) : (CANVAS_SIZE - h) / 2
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+      ctx.drawImage(img, ox, oy, img.width * scale, img.height * scale)
+      // Dimmed overlay with circular cutout
+      ctx.save()
+      ctx.fillStyle = 'rgba(0,0,0,0.52)'
+      ctx.beginPath()
+      ctx.rect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+      ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2 - 3, 0, Math.PI * 2, true)
+      ctx.fill('evenodd')
+      ctx.restore()
+      // Circle border
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2 - 3, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    clamp()
+    draw()
+
+    // Mouse drag
+    let dragging = false, dsx, dsy, dox, doy
+    canvas.addEventListener('mousedown', e => {
+      dragging = true; dsx = e.clientX; dsy = e.clientY; dox = ox; doy = oy
+    })
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return
+      ox = dox + (e.clientX - dsx); oy = doy + (e.clientY - dsy); clamp(); draw()
+    })
+    window.addEventListener('mouseup', () => { dragging = false })
+
+    // Touch drag + pinch
+    let ltx, lty, lpd
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault()
+      if (e.touches.length === 1) { ltx = e.touches[0].clientX; lty = e.touches[0].clientY }
+      else if (e.touches.length === 2) {
+        lpd = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      }
+    }, { passive: false })
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault()
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - ltx, dy = e.touches[0].clientY - lty
+        ltx = e.touches[0].clientX; lty = e.touches[0].clientY
+        ox += dx; oy += dy; clamp(); draw()
+      } else if (e.touches.length === 2) {
+        const pd = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+        zoomAround(CANVAS_SIZE / 2, CANVAS_SIZE / 2, pd / lpd)
+        lpd = pd
+      }
+    }, { passive: false })
+
+    // Scroll zoom
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      zoomAround(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.1 : 0.9)
+    }, { passive: false })
+
+    const maxScale = minScale * 8
+    const slider = document.getElementById('crop-zoom-slider')
+
+    function scaleToSlider(s) {
+      return Math.round(((s - minScale) / (maxScale - minScale)) * 100)
+    }
+
+    function zoomAround(cx, cy, factor) {
+      const prev = scale
+      scale = Math.max(minScale, Math.min(scale * factor, maxScale))
+      const f = scale / prev
+      ox = cx - f * (cx - ox); oy = cy - f * (cy - oy)
+      clamp(); draw()
+      slider.value = scaleToSlider(scale)
+    }
+
+    function zoomToCenter(newScale) {
+      zoomAround(CANVAS_SIZE / 2, CANVAS_SIZE / 2, newScale / scale)
+    }
+
+    slider.addEventListener('input', () => {
+      const newScale = minScale + (slider.value / 100) * (maxScale - minScale)
+      zoomToCenter(newScale)
+    })
+
+    document.getElementById('crop-zoom-in').addEventListener('click', () => zoomAround(CANVAS_SIZE / 2, CANVAS_SIZE / 2, 1.2))
+    document.getElementById('crop-zoom-out').addEventListener('click', () => zoomAround(CANVAS_SIZE / 2, CANVAS_SIZE / 2, 1 / 1.2))
+
+    function close() { if (isBlobUrl) URL.revokeObjectURL(url); overlay.remove() }
+
+    document.getElementById('crop-close').addEventListener('click', close)
+    document.getElementById('crop-cancel').addEventListener('click', close)
+    overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+
+    document.getElementById('crop-apply').addEventListener('click', () => {
+      // Redraw the display canvas without the overlay, then capture it directly.
+      // An offscreen canvas + clip produces a black JPEG when transparent areas
+      // (outside the clip) get flattened; using the display canvas avoids that.
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+      ctx.drawImage(img, ox, oy, img.width * scale, img.height * scale)
+      canvas.toBlob(blob => { close(); onConfirm(blob) }, 'image/jpeg', 0.92)
+    })
+  }
+
+  img.onerror = () => URL.revokeObjectURL(url)
+  img.src = url
+}
+
 function setNav(isLoggedIn) {
   document.getElementById('bottom-nav').hidden = !isLoggedIn
 
@@ -3210,13 +3370,24 @@ function routeProfile() {
           <div class="avatar-editor">
             <div class="avatar-editor__preview">
               ${user?.avatar_url
-                ? `<img src="${escapeHTML(user.avatar_url)}" alt="" class="user-avatar user-avatar--lg">`
-                : `<div class="user-avatar user-avatar--lg"><span class="user-avatar__initials">${userInitials(user?.name)}</span></div>`}
+                ? `<button class="avatar-editor__preview-btn" id="btn-recrop-avatar" title="Re-crop photo" type="button">
+                    <img src="${escapeHTML(user.avatar_url)}" alt="" class="user-avatar user-avatar--lg">
+                    <span class="avatar-editor__preview-overlay" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </span>
+                   </button>`
+                : `<label class="avatar-editor__preview-btn" title="Upload photo" style="cursor:pointer">
+                    <div class="user-avatar user-avatar--lg"><span class="user-avatar__initials">${userInitials(user?.name)}</span></div>
+                    <span class="avatar-editor__preview-overlay" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </span>
+                    <input type="file" id="avatar-file-input" accept="image/*" style="display:none">
+                   </label>`}
             </div>
             <div class="avatar-editor__actions">
               <label class="btn btn-secondary btn-sm" style="cursor:pointer">
-                Upload photo
-                <input type="file" id="avatar-file-input" accept="image/*" style="display:none">
+                ${user?.avatar_url ? 'Change photo' : 'Upload photo'}
+                <input type="file" id="avatar-file-input-btn" accept="image/*" style="display:none">
               </label>
               ${user?.avatar_url ? `<button class="btn btn-ghost btn-sm" id="btn-remove-avatar">Remove</button>` : ''}
             </div>
@@ -3292,13 +3463,13 @@ function routeProfile() {
     </div>
   `)
 
-  document.getElementById('avatar-file-input').addEventListener('change', async e => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function uploadCroppedAvatar(blob, originalFile = null) {
     const errorEl = document.getElementById('avatar-error')
+    if (!errorEl) return
     errorEl.innerHTML = ''
     const formData = new FormData()
-    formData.append('avatar', file)
+    formData.append('avatar', blob, 'avatar.jpg')
+    if (originalFile) formData.append('avatar_original', originalFile, 'avatar_original' + originalFile.name.slice(originalFile.name.lastIndexOf('.')))
     try {
       const data = await api('POST', '/auth/avatar', formData)
       if (data) {
@@ -3307,8 +3478,23 @@ function routeProfile() {
         routeProfile()
       }
     } catch (err) {
-      errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
+      if (errorEl) errorEl.innerHTML = `<div class="alert alert-error mb-4">${err.message}</div>`
     }
+  }
+
+  function handleAvatarFileChange(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    openAvatarCropper(file, blob => uploadCroppedAvatar(blob, file))
+  }
+
+  document.getElementById('avatar-file-input')?.addEventListener('change', handleAvatarFileChange)
+  document.getElementById('avatar-file-input-btn').addEventListener('change', handleAvatarFileChange)
+
+  document.getElementById('btn-recrop-avatar')?.addEventListener('click', () => {
+    const sourceUrl = user.avatar_original_url || user.avatar_url
+    openAvatarCropper(sourceUrl, blob => uploadCroppedAvatar(blob))
   })
 
   document.getElementById('btn-remove-avatar')?.addEventListener('click', async () => {
