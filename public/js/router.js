@@ -3714,7 +3714,14 @@ document.addEventListener('click', e => {
   const url = new URL(a.href)
   if (url.origin !== location.origin) return
   e.preventDefault()
-  navigate(url.pathname + url.search)
+  const target = url.pathname + url.search
+  // Resolve where the target actually lands (e.g. / → /galaxies when logged in)
+  const resolved = (target === '/' && auth.isLoggedIn) ? '/galaxies' : target
+  if (resolved === location.pathname + location.search) {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  navigate(target)
 })
 
 // Browser back/forward
