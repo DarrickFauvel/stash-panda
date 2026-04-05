@@ -1274,6 +1274,11 @@ quantity-stepper input[type="number"] {
   height: 100%;
 }
 
+.loc-delete { color: var(--c-danger) !important; }
+.loc-delete:hover { background: color-mix(in srgb, var(--c-danger) 15%, transparent) !important; }
+.loc-add-child-btn { color: #16a34a !important; }
+.loc-add-child-btn:hover { background: color-mix(in srgb, #16a34a 15%, transparent) !important; }
+
 .loc-type-label-btn {
   position: relative;
   display: inline-flex;
